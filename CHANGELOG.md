@@ -1,7 +1,15 @@
 # CHANGELOG
 
 
+## v0.1.3 (2025-05-21)
+
+
 ## v0.1.2 (2025-05-21)
+
+### Bug Fixes
+
+- Build issue
+  ([`6db4e2a`](https://github.com/Datura-ai/celium-sdk/commit/6db4e2a7d3e4c2ee76e9c98c955e1a1b484089a9))
 
 
 ## v0.1.1 (2025-05-21)
