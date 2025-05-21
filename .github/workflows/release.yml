@@ -28,6 +28,16 @@ jobs:
     - name: Build package
       run: python -m build --sdist --wheel --outdir dist/
 
+    - name: Create and push git tag
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=${{ github.event.inputs.version }}
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag "v$VERSION"
+        git push origin "v$VERSION"
+
     - name: Check if package version already exists
       run: |
         PACKAGE_NAME=$(python -c "import toml; print(toml.load('pyproject.toml')['project']['name'])") 
