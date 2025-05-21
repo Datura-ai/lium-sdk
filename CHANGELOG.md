@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.7 (2025-05-21)
+
+### Bug Fixes
+
+- Update release workflow to fix permissions and restore build steps
+  ([`fe93d3c`](https://github.com/Datura-ai/celium-sdk/commit/fe93d3c4a78ec67d79c501bd8797fe5a22f6a74e))
+
+
 ## v0.1.6 (2025-05-21)
 
 ### Bug Fixes
