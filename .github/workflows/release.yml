@@ -35,9 +35,13 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}   # write permission needed :contentReference[oaicite:4]{index=4}
 
       # ───────── Build sdist + wheel ─────────
+      - name: Remove celium.egg-info if exists
+        run: rm -rf celium.egg-info
+
       - name: Build distributions
         if: steps.semrel.outputs.released == 'true'
         run: |
+          ls -la .
           python -m pip install --upgrade pip build
           python -m build
 
