@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "celium"
+version = "0.1.0"
+description = "A Python SDK for Celium API."
+authors = [{ name = "Waris Ali" }]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pydantic>=2.0.0",
+    "httpx>=0.24.0",
+    "requests>=2.31.0",
+    "build>=0.10.0"
+]
+
+[project.urls]
+# more details can be found here
+homepage = "https://github.com/Datura-ai/celium-sdk"
+Repository = "https://github.com/Datura-ai/celium-sdk"
+
+[tool.flit.metadata]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[tool.setuptools]
+package-dir = { "celium" = "celium" }
+
+[tool.semantic_release]
+version_variable = "celium/version.py:VERSION"
+branch           = "main"
+build_command    = "pip install . && python -m build"
+tag_format       = "v{version}"
+upload_to_pypi   = true          # expects PYPI_TOKEN
