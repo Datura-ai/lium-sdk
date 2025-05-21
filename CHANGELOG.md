@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.5 (2025-05-21)
+
+### Bug Fixes
+
+- Update release workflow to include PYPI_TOKEN for publishing
+  ([`0dc6319`](https://github.com/Datura-ai/celium-sdk/commit/0dc631968f3624f9863ef97ee6ad477634ba55c6))
+
+
 ## v0.1.4 (2025-05-21)
 
 ### Bug Fixes
