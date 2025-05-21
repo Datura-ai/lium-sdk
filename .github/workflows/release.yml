@@ -1,25 +1,63 @@
 name: Continuous Delivery
 
+# ────────────────────────────────
+# Triggers
+# ────────────────────────────────
 on:
   push:
-    branches: [main]
+    branches: [main]       # release only from the primary branch
+  workflow_dispatch:       # allow manual re-runs
 
+# ────────────────────────────────
+# Token scopes for GITHUB_TOKEN
+# ────────────────────────────────
 permissions:
-  contents: write   # create tag & release
-  id-token: write   # OIDC for PyPI if using trusted-publisher
+  contents: write          # push commit + tag + release notes
+  id-token: write          # OIDC token for PyPI trusted-publisher
+
+env:
+  PYTHON_VERSION: '3.11'
 
 jobs:
   release:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-        with: {fetch-depth: 0}
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
-      - name: Install semantic-release
-        run: pip install python-semantic-release
-      - name: Run semantic-release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: semantic-release publish  # = version + build + changelog + tag + upload
+    # 1️⃣ Fetch full history so semantic-release can see previous tags
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    # 2️⃣ Determine next version, commit, tag, push, create GitHub release
+    - name: Bump, tag & create release
+      id: semrel
+      uses: python-semantic-release/python-semantic-release@v9
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    # 3️⃣ Build wheel + sdist only when a new release was produced
+    - name: Build distributions
+      if: steps.semrel.outputs.released == 'true'
+      run: |
+        python -m pip install --upgrade build
+        pip install .
+        python -m build
+
+    # 4️⃣ Publish to PyPI via trusted-publisher (no API token needed)
+    - name: Publish to PyPI
+      if: steps.semrel.outputs.released == 'true'
+      uses: pypa/gh-action-pypi-publish@v1.8.11
+      with:
+        skip_existing: true    # safe on re-runs
+
+    # 5️⃣ Attach the freshly built artefacts to the GitHub release page
+    - name: Upload dists to GitHub Release
+      if: steps.semrel.outputs.released == 'true'
+      uses: python-semantic-release/upload-to-gh-release@v9
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        files: dist/*
