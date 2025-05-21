@@ -51,7 +51,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@v1.8.11
         with:
           skip_existing: true                # safe on rerun
-          password: ${{ secrets.PYPI_TOKEN }}
 
       # ───────── Attach wheel/sdist to the GitHub Release ────────
       - name: Attach dists to Release
