@@ -43,7 +43,10 @@ classifiers = [
 package-dir = { "celium" = "celium" }
 
 [tool.semantic_release]
-version_variable = "celium/version.py:VERSION"
+version_variable = [
+    "celium/version.py:VERSION",
+    "pyproject.toml:project.version"
+]
 branch           = "main"
 build_command    = "pip install . && python -m build"
 tag_format       = "v{version}"
