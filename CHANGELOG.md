@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.6 (2025-05-21)
+
+### Bug Fixes
+
+- Remove PYPI_TOKEN from release workflow for security reasons
+  ([`1f72374`](https://github.com/Datura-ai/celium-sdk/commit/1f72374b7e63912fffad3a7c968feb9a49ab9244))
+
+
 ## v0.1.5 (2025-05-21)
 
 ### Bug Fixes
