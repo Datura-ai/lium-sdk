@@ -1,9 +1,15 @@
 # CHANGELOG
 
 
+## v0.1.2 (2025-05-21)
+
+
 ## v0.1.1 (2025-05-21)
 
 ### Bug Fixes
+
+- Build issue
+  ([`d28763a`](https://github.com/Datura-ai/celium-sdk/commit/d28763a982cb5df374d5fe9f780b74f965ed8c3c))
 
 - Cd pipeline
   ([`12aa8fc`](https://github.com/Datura-ai/celium-sdk/commit/12aa8fce58f7208bc0a794a120dca05494e17834))
