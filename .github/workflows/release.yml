@@ -1,50 +1,59 @@
 name: Continuous Delivery
 on:
-  push:
-    branches: [main]
+  push: {branches: [main]}
   workflow_dispatch:
 
 permissions:
-  contents: write        # commit + tag + release notes
-  id-token: write        # OIDC for PyPI
+  contents: write      # tag + release notes
+  id-token:  write     # OIDC ➜ PyPI
+
+env:
+  PYTHON_VERSION: '3.11'
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-    # -- pull full history so previous tags are visible --
-    - uses: actions/checkout@v4
-      with: { fetch-depth: 0 }
+      # ───────── Checkout full history for previous tags ─────────
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
 
-    - uses: actions/setup-python@v5
-      with: { python-version: '3.11' }
+      - name: Clean workspace
+        run: git clean -xfd
 
-    # 1️⃣ bump version, commit, tag, create GH release
-    - name: Python Semantic Release
-      id: semrel
-      uses: python-semantic-release/python-semantic-release@v9
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+      # ───────── Install CPython & enable built-in pip cache ─────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'                      # built-in caching :contentReference[oaicite:3]{index=3}
 
-    # 2️⃣ build your dists only if a release happened
-    - name: Build dists
-      if: steps.semrel.outputs.released == 'true'
-      run: |
-        pip install build
-        python -m build
+      # ───────── Bump version, commit, tag, create Release ───────
+      - name: python-semantic-release version
+        id: semrel
+        uses: python-semantic-release/python-semantic-release@v9
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}   # write permission needed :contentReference[oaicite:4]{index=4}
 
-    # 3️⃣ upload to PyPI (trusted-publisher via OIDC)
-    - name: Publish to PyPI
-      if: steps.semrel.outputs.released == 'true'
-      uses: pypa/gh-action-pypi-publish@v1.8.11
-      with:
-        skip_existing: true
+      # ───────── Build sdist + wheel ─────────
+      - name: Build distributions
+        if: steps.semrel.outputs.released == 'true'
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
 
-    # 4️⃣ upload artefacts to the GitHub Release
-    - name: Attach dists to Release
-      if: steps.semrel.outputs.released == 'true'
-      uses: python-semantic-release/publish-action@v9   # ← new action
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        tag: ${{ steps.semrel.outputs.tag }}
-        directory: dist
+      # ───────── Publish to PyPI via OIDC trusted-publisher ──────
+      - name: Publish to PyPI
+        if: steps.semrel.outputs.released == 'true'
+        uses: pypa/gh-action-pypi-publish@v1.8.11
+        with:
+          skip_existing: true                # safe on rerun
+                                             # OIDC id-token picked up automatically :contentReference[oaicite:6]{index=6}
+
+      # ───────── Attach wheel/sdist to the GitHub Release ────────
+      - name: Attach dists to Release
+        if: steps.semrel.outputs.released == 'true'
+        uses: python-semantic-release/publish-action@v9
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag:       ${{ steps.semrel.outputs.tag }}
+          directory: dist                    # uploads whatever is in dist/ :contentReference[oaicite:7]{index=7}

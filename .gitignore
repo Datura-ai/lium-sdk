@@ -6,3 +6,4 @@ build/
 celium.egg-info/
 .env
 .venv 
+*.egg-info
