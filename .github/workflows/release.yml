@@ -35,15 +35,22 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}   # write permission needed :contentReference[oaicite:4]{index=4}
 
       # # ───────── Build sdist + wheel ─────────
-      # - name: Remove celium.egg-info if exists
-      #   run: rm -rf celium.egg-info
+      - name: Fix permissions on celium.egg-info
+        run: |
+          ls -la ./
+          if [ -d celium.egg-info ]; then
+            chmod -R u+rwX,go+rX,go-w celium.egg-info
+          fi
 
-      # - name: Build distributions
-      #   if: steps.semrel.outputs.released == 'true'
-      #   run: |
-      #     ls -la .
-      #     python -m pip install --upgrade pip build
-      #     python -m build
+      - name: Remove celium.egg-info if exists
+        run: rm -rf celium.egg-info
+
+      - name: Build distributions
+        if: steps.semrel.outputs.released == 'true'
+        run: |
+          ls -la .
+          python -m pip install --upgrade pip build
+          python -m build
 
       # ───────── Publish to PyPI via OIDC trusted-publisher ──────
       - name: Publish to PyPI
@@ -51,6 +58,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@v1.8.11
         with:
           skip_existing: true                # safe on rerun
+                                             # OIDC id-token picked up automatically :contentReference[oaicite:6]{index=6}
 
       # ───────── Attach wheel/sdist to the GitHub Release ────────
       - name: Attach dists to Release
