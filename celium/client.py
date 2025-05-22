@@ -6,6 +6,7 @@ from .transport.httpx_sync import HttpxSyncTransport
 from .auth.api_key import ApiKeyAuth
 # Add resources here
 from .resources.pods import Pods
+from .resources.docker_credentials import DockerCredentials
 from .transport.base import Transport
 
 
@@ -14,6 +15,7 @@ class Client:
 
     # -------------- resources -------------- #
     pods: Pods
+    docker_credentials: DockerCredentials
 
     def __init__(
         self,
@@ -44,6 +46,7 @@ class Client:
         # -------------- resources -------------- #
         secured = self._transport_with_auth
         self.pods = Pods(secured)
+        self.docker_credentials = DockerCredentials(secured)
 
     # ============================================== #
     # Helpers
