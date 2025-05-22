@@ -34,4 +34,4 @@ class DockerCredentials(BaseResource, _DockerCredentialsCore):
     def delete(self, id: UUID) -> None:
         """Delete a docker credential.
         """
-        self._t.request("DELETE", f"{self.list_url}/{id}")
+        self._t.request("DELETE", f"{self.list_url}{id}")

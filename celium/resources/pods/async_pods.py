@@ -5,7 +5,7 @@ from celium.models.executor import Executor, ExecutorFilterQuery
 class AsyncPods(BaseResource, _PodsCore):
     """Async pods resource."""
     
-    async def list_executors(self, filter_query: ExecutorFilterQuery | None = None) -> list[Executor]:
+    async def list_executors(self, filter_query: ExecutorFilterQuery | dict | None = None) -> list[Executor]:
         """List all executors.
         These are the machines from subnet that aren't being rented out. 
         

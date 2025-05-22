@@ -34,4 +34,4 @@ class AsyncDockerCredentials(BaseResource, _DockerCredentialsCore):
     async def delete(self, id: UUID) -> None:
         """Delete a docker credential.
         """
-        await self._t.arequest("DELETE", f"{self.list_url}/{id}")
+        await self._t.arequest("DELETE", f"{self.list_url}{id}")

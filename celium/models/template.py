@@ -1,0 +1,32 @@
+from datetime import datetime
+from uuid import UUID
+from typing_extensions import Literal
+from celium.models import _FrozenBase
+
+
+class TemplateBase(_FrozenBase):
+    name: str
+    description: str | None
+    docker_image: str
+    docker_image_tag: str
+    docker_image_digest: str | None
+    docker_image_size: int | None
+    category: Literal["DOCKER", "PYTORCH", "NVIDIA", "TENSOR_FLOW", "OPEN_AI", "UBUNTU"] = "DOCKER"
+    volumes: list[str] | None
+    environment: dict[str, str] | None
+    entrypoint: str | None
+    internal_ports: list[int] | None
+    is_private: bool = True
+    readme: str | None
+    startup_commands: str | None 
+    status: Literal["CREATED", "UPDATED", "VERIFY_PENDING", "VERIFY_FAILED", "VERIFY_SUCCESS"] = "CREATED"
+    docker_credential_id: UUID | None
+    verification_logs: str | None
+    container_start_immediately: bool | None = True
+
+
+class Template(TemplateBase):
+    id: UUID
+    user_id: UUID
+    created_at: datetime
+    updated_at: datetime

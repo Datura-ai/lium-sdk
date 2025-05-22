@@ -88,7 +88,7 @@ class MachineSpec(_FrozenBase):
 
 
 class ExecutorFilterQuery(_FrozenBase):
-    machine_names: str | None = None
+    machine_names: list[str] | None = None
     price_per_hour_lte: float | None = None
     price_per_hour_gte: float | None = None
     gpu_count_lte: int | None = None
