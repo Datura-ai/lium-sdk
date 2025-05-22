@@ -5,12 +5,15 @@ from .config import Config
 from .transport.httpx_sync import HttpxSyncTransport
 from .auth.api_key import ApiKeyAuth
 # Add resources here
-from .resources.pod import Pods
+from .resources.pods import Pods
 from .transport.base import Transport
 
 
 class Client:
     """Single public entry-point (sync)."""
+
+    # -------------- resources -------------- #
+    pods: Pods
 
     def __init__(
         self,

@@ -5,10 +5,12 @@ from .config import Config
 from .transport.httpx_async import HttpxAsyncTransport
 from .auth.api_key import ApiKeyAuth
 from .transport.base import Transport
+from .resources.pods import AsyncPods
 
 
 class AsyncClient:
     """Async variant (uses httpx.AsyncClient under the hood)."""
+    pods: AsyncPods
 
     def __init__(
         self,
@@ -29,13 +31,15 @@ class AsyncClient:
 
         self._transport = transport or HttpxAsyncTransport(
             base_url=self._config.base_url,
-            default_headers={"User-Agent": self._config.user_agent},
+            default_headers={},
             timeout=self._config.timeout,
             max_retries=self._config.max_retries,
         )
         self._auth = ApiKeyAuth(api_key or "")
 
+        # -------------- resources -------------- #
         secured = self._transport_with_auth
+        self.pods = AsyncPods(secured)
 
     # ------------------------------------------------- #
     @property

@@ -64,6 +64,18 @@ class HttpxAsyncTransport(Transport):
             scrub_headers({**self._default_headers, **(headers or {})}),
         )
         return await self._do(method, path, params=params, json=json, headers=headers)
+    
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        **kwargs,
+    ) -> ResponseLike:
+        raise NotImplementedError("Sync requests are not supported for async transport")
 
     # --------------------- cleanup -------------------- #
     async def aclose(self) -> None:
