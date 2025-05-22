@@ -36,7 +36,7 @@ class HttpxAsyncTransport(Transport):
 
         for attempt in range(self._max_retries + 1):
             if attempt:
-                logger.debug("Retrying %s %s (attempt %d)", method, url, attempt + 1)
+                logger.debug("Retrying {} {} (attempt {})", method, url, attempt + 1)
 
             resp = await self._client.request(
                 method, url, params=params, json=json, headers=hdrs
@@ -57,13 +57,12 @@ class HttpxAsyncTransport(Transport):
         headers: dict | None = None,
         **kwargs,
     ) -> ResponseLike:
-        if logger.isEnabledFor(10):
-            logger.debug(
-                "HTTP  ➜  %s %s  hdrs=%s",
-                method,
-                path,
-                scrub_headers({**self._default_headers, **(headers or {})}),
-            )
+        logger.debug(
+            "HTTP  ➜  {} {}  hdrs={}",
+            method,
+            path,
+            scrub_headers({**self._default_headers, **(headers or {})}),
+        )
         return await self._do(method, path, params=params, json=json, headers=headers)
 
     # --------------------- cleanup -------------------- #

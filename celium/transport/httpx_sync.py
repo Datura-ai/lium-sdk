@@ -37,7 +37,7 @@ class HttpxSyncTransport(Transport):
 
         for attempt in range(self._max_retries + 1):
             if attempt:
-                logger.debug("Retrying %s %s (attempt %d)", method, url, attempt + 1)
+                logger.debug("Retrying {} {} (attempt {})", method, url, attempt + 1)
 
             resp = self._client.request(
                 method, url, params=params, json=json, headers=hdrs
@@ -58,14 +58,25 @@ class HttpxSyncTransport(Transport):
         headers: dict | None = None,
         **kwargs,
     ) -> ResponseLike:
-        if logger.isEnabledFor(10):
-            logger.debug(
-                "HTTP  ➜  %s %s  hdrs=%s",
-                method,
-                path,
-                scrub_headers({**self._default_headers, **(headers or {})}),
-            )
+        logger.debug(
+            "HTTP  ➜  {} {}  hdrs={}",
+            method,
+            path,
+            scrub_headers({**self._default_headers, **(headers or {})}),
+        )
         return self._do(method, path, params=params, json=json, headers=headers)
+    
+    async def arequest(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        **kwargs,
+    ) -> ResponseLike: 
+        raise NotImplementedError("Async requests are not supported yet")
 
     # --------------------- cleanup --------------------- #
     def close(self) -> None:

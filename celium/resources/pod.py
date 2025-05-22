@@ -3,10 +3,12 @@ from __future__ import annotations
 from typing import Any, Iterable, Iterator, List
 
 from .base import BaseResource
+from celium.models.executor import Executor, ExecutorFilterQuery
 
 
 class Pods(BaseResource):
     ENDPOINT = "/pods"
+    EXECUTORS_ENDPOINT = "/executors"
 
     # ---------------- CRUD ---------------- #
     # def create(
@@ -35,3 +37,11 @@ class Pods(BaseResource):
 
     # def delete(self, container_id: str) -> None:
     #     self._t.request("DELETE", f"{self.ENDPOINT}/{container_id}")
+
+    def list_executors(self, filter_query: ExecutorFilterQuery | None = None) -> list[Executor]:
+        resp = self._t.request(
+            "GET", 
+            self.EXECUTORS_ENDPOINT, 
+            params=filter_query.model_dump(mode='json') if filter_query else None
+        )
+        return [Executor.model_validate(r) for r in self._get_json(resp)]

@@ -5,6 +5,7 @@ from .config import Config
 from .transport.httpx_sync import HttpxSyncTransport
 from .auth.api_key import ApiKeyAuth
 # Add resources here
+from .resources.pod import Pods
 from .transport.base import Transport
 
 
@@ -31,7 +32,7 @@ class Client:
         # -------------- core plumbing -------------- #
         self._transport = transport or HttpxSyncTransport(
             base_url=self._config.base_url,
-            default_headers={"User-Agent": self._config.user_agent},
+            default_headers={},
             timeout=self._config.timeout,
             max_retries=self._config.max_retries,
         )
@@ -39,6 +40,7 @@ class Client:
 
         # -------------- resources -------------- #
         secured = self._transport_with_auth
+        self.pods = Pods(secured)
 
     # ============================================== #
     # Helpers
