@@ -7,11 +7,14 @@ from .auth.api_key import ApiKeyAuth
 from .transport.base import Transport
 from .resources.pods import AsyncPods
 from .resources.docker_credentials import AsyncDockerCredentials
+from .resources.templates.async_templates import AsyncTemplates
+
 
 class AsyncClient:
     """Async variant (uses httpx.AsyncClient under the hood)."""
     pods: AsyncPods
     docker_credentials: AsyncDockerCredentials
+    templates: AsyncTemplates
 
     def __init__(
         self,
@@ -42,6 +45,7 @@ class AsyncClient:
         secured = self._transport_with_auth
         self.pods = AsyncPods(secured)
         self.docker_credentials = AsyncDockerCredentials(secured)
+        self.templates = AsyncTemplates(secured)
 
     # ------------------------------------------------- #
     @property

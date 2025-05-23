@@ -1,20 +1,23 @@
+import time
 from uuid import UUID
-from celium.models.template import Template
+from celium.utils.logging import logger
+from celium.models.template import Template, TemplateCreate, TemplateUpdate
 from celium.resources.base import BaseResource
 from celium.resources.templates.templates_core import _TemplatesCore
 
+
 class Templates(BaseResource, _TemplatesCore):
-    def create(self, **template_data) -> Template:
+    def create(self, data: TemplateCreate | dict) -> Template:
         """Create a template."""
         resp = self._t.request(
-            "POST", self.ENDPOINT, json=template_data
+            "POST", self.ENDPOINT, json=self._parse_create_data(data)
         )
         return self.parse_one(self._get_json(resp))
     
-    def update(self, id: UUID, **template_data) -> Template:
+    def update(self, id: UUID, data: TemplateUpdate | dict) -> Template:
         """Update a template."""
         resp = self._t.request(
-            "PUT", f"{self.ENDPOINT}/{id}", json=template_data
+            "PUT", f"{self.ENDPOINT}/{id}", json=self._parse_update_data(data)
         )
         return self.parse_one(self._get_json(resp))
 
@@ -22,6 +25,22 @@ class Templates(BaseResource, _TemplatesCore):
         """List all templates."""
         resp = self._t.request("GET", self.ENDPOINT)
         return self.parse_many(self._get_json(resp))
+    
+    def retrieve(self, id: UUID, wait_until_verified: bool = False) -> Template:
+        """Retrieve a template."""
+        max_retries = 30 if wait_until_verified else 1
+        retries = 0
+        while retries < max_retries:
+            resp = self._t.request("GET", f"{self.ENDPOINT}/{id}")
+            template = self.parse_one(self._get_json(resp))
+            if template.status in ["VERIFY_SUCCESS", "VERIFY_FAILED"]:
+                return template
+            logger.debug(
+                f"Template {id} not verified yet, current status is {template.status}, retrying... ({retries}/{max_retries})"
+            )
+            time.sleep(3)
+            retries += 1
+        return template
 
     def delete(self, id: UUID) -> None:
         """Delete a template."""

@@ -8,6 +8,7 @@ from .auth.api_key import ApiKeyAuth
 from .resources.pods import Pods
 from .resources.docker_credentials import DockerCredentials
 from .transport.base import Transport
+from .resources.templates import Templates
 
 
 class Client:
@@ -16,6 +17,7 @@ class Client:
     # -------------- resources -------------- #
     pods: Pods
     docker_credentials: DockerCredentials
+    templates: Templates
 
     def __init__(
         self,
@@ -47,7 +49,8 @@ class Client:
         secured = self._transport_with_auth
         self.pods = Pods(secured)
         self.docker_credentials = DockerCredentials(secured)
-
+        self.templates = Templates(secured)
+        
     # ============================================== #
     # Helpers
     # ============================================== #

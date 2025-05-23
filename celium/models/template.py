@@ -6,23 +6,31 @@ from celium.models import _FrozenBase
 
 class TemplateBase(_FrozenBase):
     name: str
-    description: str | None
+    description: str | None = None
     docker_image: str
     docker_image_tag: str
-    docker_image_digest: str | None
-    docker_image_size: int | None
+    docker_image_digest: str | None = ""
+    docker_image_size: int | None = None
     category: Literal["DOCKER", "PYTORCH", "NVIDIA", "TENSOR_FLOW", "OPEN_AI", "UBUNTU"] = "DOCKER"
-    volumes: list[str] | None
-    environment: dict[str, str] | None
-    entrypoint: str | None
-    internal_ports: list[int] | None
+    volumes: list[str] | None = ["/workspace"]
+    environment: dict[str, str] | None = {}
+    entrypoint: str | None = ""
+    internal_ports: list[int] | None = []
     is_private: bool = True
-    readme: str | None
-    startup_commands: str | None 
+    readme: str | None = None
+    startup_commands: str | None = ""
     status: Literal["CREATED", "UPDATED", "VERIFY_PENDING", "VERIFY_FAILED", "VERIFY_SUCCESS"] = "CREATED"
-    docker_credential_id: UUID | None
-    verification_logs: str | None
+    docker_credential_id: UUID | None = None
+    verification_logs: str | None = None
     container_start_immediately: bool | None = True
+
+
+class TemplateCreate(TemplateBase):
+    pass
+
+
+class TemplateUpdate(TemplateBase):
+    pass
 
 
 class Template(TemplateBase):

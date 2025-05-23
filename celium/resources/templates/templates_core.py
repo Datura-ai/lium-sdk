@@ -1,5 +1,6 @@
 from typing import Any
-from celium.models.template import Template
+from celium.models.template import Template, TemplateCreate, TemplateUpdate
+
 
 class _TemplatesCore:
     ENDPOINT = "/templates"
@@ -9,3 +10,13 @@ class _TemplatesCore:
     
     def parse_one(self, data: dict[str, Any]) -> Template:
         return Template.model_validate(data)
+
+    def _parse_create_data(self, data: TemplateCreate | dict) -> dict:
+        if isinstance(data, dict):
+            data = TemplateCreate.model_validate(data)
+        return data.model_dump(mode='json', exclude_none=True)
+
+    def _parse_update_data(self, data: TemplateUpdate | dict) -> dict:
+        if isinstance(data, dict):
+            data = TemplateUpdate.model_validate(data)
+        return data.model_dump(mode='json', exclude_none=True)
