@@ -35,3 +35,13 @@ class DockerCredentials(BaseResource, _DockerCredentialsCore):
         """Delete a docker credential.
         """
         self._t.request("DELETE", f"{self.list_url}{id}")
+
+    def get_default(self) -> DockerCredential:
+        """Get the default docker credential.
+        """
+        d_creds = self.list()
+        if len(d_creds) > 0:
+            return d_creds[0]
+        # Create a new docker credential
+        resp = self._t.request("POST", self.list_url)
+        return self.parse_one(self._get_json(resp))

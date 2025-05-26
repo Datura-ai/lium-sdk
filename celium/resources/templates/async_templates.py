@@ -2,11 +2,11 @@ import asyncio
 from uuid import UUID
 from celium.utils.logging import logger
 from celium.models.template import Template, TemplateCreate, TemplateUpdate
-from celium.resources.base import BaseResource
+from celium.resources.base import BaseAsyncResource
 from celium.resources.templates.templates_core import _TemplatesCore
 
 
-class AsyncTemplates(BaseResource, _TemplatesCore):
+class AsyncTemplates(BaseAsyncResource, _TemplatesCore):
     async def create(self, data: TemplateCreate | dict) -> Template:
         """Create a template."""
         resp = await self._t.arequest(

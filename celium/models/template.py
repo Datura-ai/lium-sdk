@@ -19,10 +19,7 @@ class TemplateBase(_FrozenBase):
     is_private: bool = True
     readme: str | None = None
     startup_commands: str | None = ""
-    status: Literal["CREATED", "UPDATED", "VERIFY_PENDING", "VERIFY_FAILED", "VERIFY_SUCCESS"] = "CREATED"
-    docker_credential_id: UUID | None = None
-    verification_logs: str | None = None
-    container_start_immediately: bool | None = True
+
 
 
 class TemplateCreate(TemplateBase):
@@ -33,8 +30,16 @@ class TemplateUpdate(TemplateBase):
     pass
 
 
+class TemplateForPod(TemplateBase):
+    pass
+
+
 class Template(TemplateBase):
     id: UUID
-    user_id: UUID
+    user_id: UUID | None 
+    status: Literal["CREATED", "UPDATED", "VERIFY_PENDING", "VERIFY_FAILED", "VERIFY_SUCCESS"] = "CREATED"
+    docker_credential_id: UUID | None = None
+    verification_logs: str | None = None
+    container_start_immediately: bool | None = True
     created_at: datetime
     updated_at: datetime

@@ -1,10 +1,10 @@
 from uuid import UUID
 from celium.models.docker_credentials import DockerCredential
-from celium.resources.base import BaseResource
+from celium.resources.base import BaseAsyncResource
 from celium.resources.docker_credentials.docker_credentials_core import _DockerCredentialsCore
 
 
-class AsyncDockerCredentials(BaseResource, _DockerCredentialsCore):
+class AsyncDockerCredentials(BaseAsyncResource, _DockerCredentialsCore):
     async def create(self, username: str, password: str) -> DockerCredential:
         """Create a docker credential.
         """

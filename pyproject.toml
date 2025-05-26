@@ -15,6 +15,7 @@ dependencies = [
     "requests>=2.31.0",
     "build>=0.10.0",
     "loguru>=0.7.0",
+    "paramiko>=3.5.1",
 ]
 
 [project.urls]

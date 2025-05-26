@@ -95,12 +95,24 @@ class ExecutorFilterQuery(_FrozenBase):
     gpu_count_gte: int | None = None
 
 
-class Executor(_FrozenBase):
+class _ExecutorBase(_FrozenBase):
     id: UUID
     machine_name: str
     price_per_hour: float
     executor_ip_address: str
     validator_hotkey: str
     specs: MachineSpec
-    uptime_in_minutes: int
+    uptime_in_minutes: int | None
+
+
+class Executor(_ExecutorBase):
     location: Location | None
+
+
+class ExecutorForPod(_ExecutorBase):
+    active: bool
+
+
+class ExecutorStatus(_FrozenBase):
+    logs: list[dict]
+    

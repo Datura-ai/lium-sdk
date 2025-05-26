@@ -7,3 +7,5 @@ celium.egg-info/
 .env
 .venv 
 *.egg-info
+.vscode/
+celium/_scripts/

@@ -1,6 +1,8 @@
 """Async Client façade."""
 from __future__ import annotations
 
+from celium.resources.ssh_keys.async_ssh_keys import AsyncSSHKeys
+
 from .config import Config
 from .transport.httpx_async import HttpxAsyncTransport
 from .auth.api_key import ApiKeyAuth
@@ -15,6 +17,7 @@ class AsyncClient:
     pods: AsyncPods
     docker_credentials: AsyncDockerCredentials
     templates: AsyncTemplates
+    ssh_keys: AsyncSSHKeys
 
     def __init__(
         self,
@@ -46,7 +49,8 @@ class AsyncClient:
         self.pods = AsyncPods(secured)
         self.docker_credentials = AsyncDockerCredentials(secured)
         self.templates = AsyncTemplates(secured)
-
+        self.ssh_keys = AsyncSSHKeys(secured)
+        
     # ------------------------------------------------- #
     @property
     def _transport_with_auth(self) -> Transport:

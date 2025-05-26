@@ -9,6 +9,7 @@ from .resources.pods import Pods
 from .resources.docker_credentials import DockerCredentials
 from .transport.base import Transport
 from .resources.templates import Templates
+from .resources.ssh_keys import SSHKeys
 
 
 class Client:
@@ -18,6 +19,7 @@ class Client:
     pods: Pods
     docker_credentials: DockerCredentials
     templates: Templates
+    ssh_keys: SSHKeys
 
     def __init__(
         self,
@@ -47,9 +49,10 @@ class Client:
 
         # -------------- resources -------------- #
         secured = self._transport_with_auth
-        self.pods = Pods(secured)
-        self.docker_credentials = DockerCredentials(secured)
-        self.templates = Templates(secured)
+        self.pods = Pods(secured, self)
+        self.docker_credentials = DockerCredentials(secured, self)
+        self.templates = Templates(secured, self)
+        self.ssh_keys = SSHKeys(secured, self)
         
     # ============================================== #
     # Helpers

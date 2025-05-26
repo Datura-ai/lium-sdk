@@ -45,6 +45,7 @@ class HttpxSyncTransport(Transport):
 
             if resp.status_code >= 500 and attempt < self._max_retries:
                 continue
+            resp.raise_for_status()
             return resp  # may be non-2xx; resource will map to error.
 
     # ----------------------- sync ---------------------- #

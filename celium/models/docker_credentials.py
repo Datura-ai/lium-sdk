@@ -6,6 +6,8 @@ from celium.models import _FrozenBase
 class DockerCredential(_FrozenBase):
     id: UUID
     user_id: UUID
+    username: str
+    password: str
     created_at: datetime
     updated_at: datetime
     
