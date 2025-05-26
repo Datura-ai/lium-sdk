@@ -1,0 +1,22 @@
+site_name: Celium SDK Docs
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - content.code.copy          # copy-to-clipboard buttons
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: sphinx
+nav:
+  - Home: index.md
+  - Reference:
+      - Clients: reference/clients.md
+      - Resources: 
+        - Docker Credentials: reference/resources/docker-credentials.md
+        - Pods: reference/resources/pods.md
+        - SSH Keys: reference/resources/ssh-keys.md
+        - Templates: reference/resources/templates.md

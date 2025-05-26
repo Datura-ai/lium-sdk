@@ -9,17 +9,18 @@ from celium.utils.logging import logger
 
 
 class AsyncPods(BaseAsyncResource, _PodsCore):
-    """Async pods resource."""
+    """
+    Async pods resource.
+    """
     
     async def list_executors(self, filter_query: ExecutorFilterQuery | dict | None = None) -> list[Executor]:
-        """List all executors.
-        These are the machines from subnet that aren't being rented out. 
-        
-        Args:
-            filter_query: Filter query to filter the executors.
-            
-        Returns:
-            list[Executor]: List of executors.
+        """
+        List all executors. These are the machines from subnet that aren't being rented out.
+
+        :param filter_query: Filter query to filter the executors.
+        :type filter_query: ExecutorFilterQuery or dict or None
+        :return: List of executors.
+        :rtype: list[Executor]
         """
         args, kwargs = self._list_executors_params(filter_query)
         resp = await self._t.arequest(*args, **kwargs)
@@ -32,16 +33,19 @@ class AsyncPods(BaseAsyncResource, _PodsCore):
         template_id: uuid.UUID, 
         user_public_key: list[str],
     ) -> Pod:
-        """Create a pod.
+        """
+        Create a pod.
 
-        Args:
-            id_in_site: The id of the pod in the site.
-            pod_name: The name of the pod.
-            template_id: The id of the template to deploy.
-            user_public_key: The user public key to use for the pod.
-
-        Returns:
-            Pod: The created pod.
+        :param id_in_site: The id of the pod in the site.
+        :type id_in_site: uuid.UUID
+        :param pod_name: The name of the pod.
+        :type pod_name: str
+        :param template_id: The id of the template to deploy.
+        :type template_id: uuid.UUID
+        :param user_public_key: The user public key to use for the pod.
+        :type user_public_key: list[str]
+        :return: The created pod.
+        :rtype: Pod
         """
         await self._t.arequest("POST", f"/executors/{id_in_site}/rent", json={
             "pod_name": pod_name,
@@ -51,24 +55,37 @@ class AsyncPods(BaseAsyncResource, _PodsCore):
         return await self.retrieve(id_in_site)
 
     async def delete(self, id_in_site: uuid.UUID) -> None:
-        """Delete a pod.
+        """
+        Delete a pod.
+
+        :param id_in_site: The id of the pod in the site.
+        :type id_in_site: uuid.UUID
+        :return: None
         """
         await self._t.arequest("DELETE", f"/executors/{id_in_site}/rent")
 
     async def list(self) -> list[PodList]:
-        """List all pods.
+        """
+        List all pods.
 
-        Returns:
-            list[Pod]: List of pods.
+        :return: List of pods.
+        :rtype: list[PodList]
         """
         resp = await self._t.arequest("GET", "/pods")
         return self._parse_list_pods_response(resp.json())
     
     async def retrieve(self, id: uuid.UUID, wait_until_running: bool = False, timeout: int = 5 * 60) -> Pod:
-        """Retrieve a pod.
+        """
+        Retrieve a pod.
 
-        Returns:
-            Pod: The retrieved pod.
+        :param id: The id of the pod.
+        :type id: uuid.UUID
+        :param wait_until_running: Whether to wait until the pod is running.
+        :type wait_until_running: bool, optional
+        :param timeout: Timeout in seconds to wait for the pod to be running.
+        :type timeout: int, optional
+        :return: The retrieved pod.
+        :rtype: Pod
         """
         resp = await self._t.arequest("GET", f"/pods/{id}")
         elapsed_time = 0
@@ -92,14 +109,27 @@ class AsyncPods(BaseAsyncResource, _PodsCore):
         additional_machine_filter: dict[str, Any] = {},
         pod_name: str | None = None,
     ) -> None:
-        """Easy deploy a template to a machine.
+        """Easy deploy a pod. 
 
-        Args:
-            machine_query: The machine query to filter the executors. (e.g. "2X4090", "4090")
-            docker_image: The docker image to deploy. Needs to be full image name with tag.
-            dockerfile: The dockerfile to deploy.
-            additional_machine_filter: Additional machine filter to filter the executors.
-            pod_name: The name of the pod.
+        :param machine_query: The machine query to filter the executors. Find executors with machine name and count. 
+        E.g. `1XA6000` will find a machine with 1 X NVIDIA RTX A6000. Count of GPUs can be skipped like `H200`
+        If you want to filter multiple machines, you can use `H200,A6000` or `H200,A6000,A100`
+        :type machine_query: str
+        :param docker_image: The docker image to deploy. Needs to be full image name with tag. 
+        If either docker_image or dockerfile is provided, sdk will create a custom template for the pod.
+        :type docker_image: str or None
+        :param dockerfile: The dockerfile to deploy. If dockerfile is provided, sdk will build a docker image from dockerfile and create 
+        one-time template for the pod.
+        :type dockerfile: str or None
+        :param template_id: The id of the template to deploy. If template_id is provided, docker_image and dockerfile will be ignored.
+        Will use provided template from the platform to deploy a pod.
+        :type template_id: str or None
+        :param additional_machine_filter: Additional machine filter to filter the executors.
+        :type additional_machine_filter: dict[str, Any]
+        :param pod_name: The name of the pod.
+        :type pod_name: str or None
+        :return: The created pod.
+        :rtype: Pod
         """
         template = None
         is_one_time_template = False

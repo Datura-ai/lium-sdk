@@ -9,27 +9,60 @@ from celium.resources.templates.templates_core import _TemplatesCore
 
 
 class AsyncTemplates(BaseAsyncResource, _TemplatesCore):
+    """
+    Async/await version of the Templates resource.
+    """
     async def create(self, data: TemplateCreate | dict) -> Template:
-        """Create a template."""
+        """
+        Create a template.
+
+        :param data: The data for the new template.
+        :type data: TemplateCreate or dict
+        :return: The created Template object.
+        :rtype: Template
+        """
         resp = await self._t.arequest(
             "POST", self.ENDPOINT, json=self._parse_create_data(data)
         )
         return self.parse_one(self._get_json(resp))
     
     async def update(self, id: UUID, data: TemplateUpdate | dict) -> Template:
-        """Update a template."""
+        """
+        Update a template.
+
+        :param id: The UUID of the template to update.
+        :type id: UUID
+        :param data: The data to update the template with.
+        :type data: TemplateUpdate or dict
+        :return: The updated Template object.
+        :rtype: Template
+        """
         resp = await self._t.arequest(
             "PUT", f"{self.ENDPOINT}/{id}", json=self._parse_update_data(data)
         )
         return self.parse_one(self._get_json(resp))
 
     async def list(self) -> list[Template]:
-        """List all templates."""
+        """
+        List all templates.
+
+        :return: A list of Template objects.
+        :rtype: list[Template]
+        """
         resp = await self._t.arequest("GET", self.ENDPOINT)
         return self.parse_many(self._get_json(resp))
     
     async def retrieve(self, id: UUID, wait_until_verified: bool = False) -> Template:
-        """Retrieve a template."""
+        """
+        Retrieve a template.
+
+        :param id: The UUID of the template to retrieve.
+        :type id: UUID
+        :param wait_until_verified: Whether to wait until the template is verified.
+        :type wait_until_verified: bool, optional
+        :return: The retrieved Template object.
+        :rtype: Template
+        """
         max_retries = 30 if wait_until_verified else 1
         retries = 0
         while retries < max_retries:
@@ -45,18 +78,29 @@ class AsyncTemplates(BaseAsyncResource, _TemplatesCore):
         return template
     
     async def delete(self, id: UUID) -> None:
-        """Delete a template."""
+        """
+        Delete a template.
+
+        :param id: The UUID of the template to delete.
+        :type id: UUID
+        :return: None
+        :rtype: None
+        """
         await self._t.arequest("DELETE", f"{self.ENDPOINT}/{id}") 
     
     async def create_from_image_or_dockerfile(self, docker_image: str | None, dockerfile: str | None) -> tuple[bool, Template]:
-        """Create a template from a docker image or a dockerfile.
+        """
+        Create a template from a docker image or a dockerfile.
         
-        Args:
-            docker_image: The docker image to create the template from.
-            dockerfile: The dockerfile to create the template from.
-            
-        Returns:
-            tuple[bool, Template]: A tuple of is_one_time_template and the created template.
+        :param docker_image: The docker image to create the template from.
+        :type docker_image: str or None
+        :param dockerfile: The dockerfile to create the template from.
+        :type dockerfile: str or None
+        :raises Exception: If no docker image or dockerfile is provided.
+        :raises Exception: If failed to build and push the docker image.
+        :raises Exception: If the docker image is not valid.
+        :return: A tuple of (is_one_time_template, created_template).
+        :rtype: tuple[bool, Template]
         """
         if not docker_image and not dockerfile:
             raise Exception("No docker image or dockerfile provided.")

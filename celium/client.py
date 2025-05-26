@@ -13,7 +13,23 @@ from .resources.ssh_keys import SSHKeys
 
 
 class Client:
-    """Single public entry-point (sync)."""
+    """
+    A client for the Celium API.
+
+    Example usage::
+
+        with celium.Client(api_key=API_KEY) as client:
+            client.pods.list_executors()
+
+    :ivar pods: Access to pod-related API methods.
+    :vartype pods: Pods
+    :ivar docker_credentials: Access to Docker credentials API methods.
+    :vartype docker_credentials: DockerCredentials
+    :ivar templates: Access to template-related API methods.
+    :vartype templates: Templates
+    :ivar ssh_keys: Access to SSH key management API methods.
+    :vartype ssh_keys: SSHKeys
+    """
 
     # -------------- resources -------------- #
     pods: Pods
@@ -30,6 +46,20 @@ class Client:
         timeout: float | None = None,
         max_retries: int | None = None,
     ):
+        """
+        Initialize the Celium API client.
+
+        :param api_key: API key for authentication.
+        :type api_key: str or None
+        :param base_url: Base URL for the API endpoints.
+        :type base_url: str or None
+        :param transport: Custom transport instance to use for requests.
+        :type transport: Transport or None
+        :param timeout: Timeout for API requests in seconds.
+        :type timeout: float or None
+        :param max_retries: Maximum number of retries for failed requests.
+        :type max_retries: int or None
+        """
         self._config = Config()
         if base_url:
             object.__setattr__(self._config, "base_url", base_url)
@@ -59,11 +89,29 @@ class Client:
     # ============================================== #
     @property
     def _transport_with_auth(self) -> Transport:
+        """
+        Return a transport instance decorated with authentication.
+
+        :return: Authenticated transport instance.
+        :rtype: Transport
+        """
         return self._auth.decorate(self._transport)
 
     # -------------- context mgr -------------- #
     def __enter__(self):  # sync
+        """
+        Enter the runtime context related to this object.
+
+        :return: The client instance itself.
+        :rtype: Client
+        """
         return self
 
     def __exit__(self, *exc):
+        """
+        Exit the runtime context and close the transport.
+
+        :param exc: Exception information (if any).
+        :type exc: tuple
+        """
         self._transport.close()
