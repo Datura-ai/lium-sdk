@@ -17,7 +17,7 @@ class AsyncSSHKeys(BaseAsyncResource, _SSHKeysCore):
         return self.parse_one(self._get_json(resp))
 
     async def list(self) -> list[SSHKey]:
-        resp = await self._t.arequest("GET", self.list_url)
+        resp = await self._t.arequest("GET", f"{self.list_url}/me")
         return self.parse_many(self._get_json(resp))
 
     async def delete(self, id: UUID) -> None:

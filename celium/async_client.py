@@ -46,10 +46,10 @@ class AsyncClient:
 
         # -------------- resources -------------- #
         secured = self._transport_with_auth
-        self.pods = AsyncPods(secured)
-        self.docker_credentials = AsyncDockerCredentials(secured)
-        self.templates = AsyncTemplates(secured)
-        self.ssh_keys = AsyncSSHKeys(secured)
+        self.pods = AsyncPods(secured, self)
+        self.docker_credentials = AsyncDockerCredentials(secured, self)
+        self.templates = AsyncTemplates(secured, self)
+        self.ssh_keys = AsyncSSHKeys(secured, self)
         
     # ------------------------------------------------- #
     @property

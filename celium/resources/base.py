@@ -33,10 +33,3 @@ class BaseAsyncResource(_BaseResource):
     def __init__(self, transport: Transport, client: "AsyncClient"):
         self._t = transport
         self._client = client
-
-    # ----------------------------------------------- #
-    async def _get_json(self, resp) -> Any:
-        if resp.status_code // 100 != 2:
-            rid = resp.headers.get("x-request-id")
-            map_http_error(resp.status_code, resp.text, rid)
-        return await resp.json()

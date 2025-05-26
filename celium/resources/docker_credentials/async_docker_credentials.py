@@ -35,3 +35,13 @@ class AsyncDockerCredentials(BaseAsyncResource, _DockerCredentialsCore):
         """Delete a docker credential.
         """
         await self._t.arequest("DELETE", f"{self.list_url}{id}")
+
+    async def get_default(self) -> DockerCredential:
+        """Get the default docker credential.
+        """
+        d_creds = await self.list()
+        if len(d_creds) > 0:
+            return d_creds[0]
+        # Create a new docker credential
+        resp = await self._t.arequest("POST", self.list_url)
+        return self.parse_one(self._get_json(resp))
