@@ -93,6 +93,9 @@ class ExecutorFilterQuery(_FrozenBase):
     price_per_hour_gte: float | None = None
     gpu_count_lte: int | None = None
     gpu_count_gte: int | None = None
+    lat: float | None = None
+    lon: float | None = None
+    max_distance_mile: float | None = None
 
 
 class _ExecutorBase(_FrozenBase):

@@ -91,6 +91,93 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+### List Available Machines
+
+```python
+import celium
+
+# Ensure you have your API_KEY set as an environment variable or pass it directly
+# client = celium.Client(api_key="YOUR_API_KEY")
+with celium.Client() as client:
+    # List all RTX A4000 machines
+    machines = client.pods.list_machines(gpu_type="RTX A4000")
+    for machine in machines:
+        print(f"Machine: {machine.machine_name}, Price: ${machine.price_per_hour}/hour")
+
+    # List machines with 2-4 GPUs, sorted by price
+    machines = client.pods.list_machines(
+        min_gpu_count=2,
+        max_gpu_count=4,
+        sort_by="price",
+        sort_order="asc"
+    )
+    for machine in machines:
+        print(f"Machine: {machine.machine_name}, GPUs: {machine.specs.gpu.count}, Price: ${machine.price_per_hour}/hour")
+
+    # List machines under $5/hour with at least 1 hour uptime
+    machines = client.pods.list_machines(
+        max_price_per_hour=5.0,
+        min_uptime_minutes=60
+    )
+    for machine in machines:
+        print(f"Machine: {machine.machine_name}, Uptime: {machine.uptime_in_minutes} minutes, Price: ${machine.price_per_hour}/hour")
+
+    # List machines near a specific location (e.g., New York City)
+    machines = client.pods.list_machines(
+        lat=40.7128,  # New York City latitude
+        lon=-74.0060,  # New York City longitude
+        max_distance_mile=100  # Within 100 miles
+    )
+    for machine in machines:
+        print(f"Machine: {machine.machine_name}, Location: {machine.executor_ip_address}")
+```
+
+### List Available Machines (Async)
+
+```python
+import asyncio
+import celium
+
+# Ensure you have your API_KEY set as an environment variable or pass it directly
+# client = celium.AsyncClient(api_key="YOUR_API_KEY")
+async def main():
+    async with celium.AsyncClient() as client:
+        # List all RTX A4000 machines
+        machines = await client.pods.list_machines(gpu_type="RTX A4000")
+        for machine in machines:
+            print(f"Machine: {machine.machine_name}, Price: ${machine.price_per_hour}/hour")
+
+        # List machines with 2-4 GPUs, sorted by price
+        machines = await client.pods.list_machines(
+            min_gpu_count=2,
+            max_gpu_count=4,
+            sort_by="price",
+            sort_order="asc"
+        )
+        for machine in machines:
+            print(f"Machine: {machine.machine_name}, GPUs: {machine.specs.gpu.count}, Price: ${machine.price_per_hour}/hour")
+
+        # List machines under $5/hour with at least 1 hour uptime
+        machines = await client.pods.list_machines(
+            max_price_per_hour=5.0,
+            min_uptime_minutes=60
+        )
+        for machine in machines:
+            print(f"Machine: {machine.machine_name}, Uptime: {machine.uptime_in_minutes} minutes, Price: ${machine.price_per_hour}/hour")
+
+        # List machines near a specific location (e.g., New York City)
+        machines = await client.pods.list_machines(
+            lat=40.7128,  # New York City latitude
+            lon=-74.0060,  # New York City longitude
+            max_distance_mile=100  # Within 100 miles
+        )
+        for machine in machines:
+            print(f"Machine: {machine.machine_name}, Location: {machine.executor_ip_address}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 ## Available Resources
 
 For a detailed list of available resources and their functionalities, please refer to the following pages:

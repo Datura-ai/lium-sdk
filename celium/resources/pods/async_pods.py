@@ -1,6 +1,6 @@
 import uuid
 import time
-from typing import Any
+from typing import Any, List
 from celium.models.pod import Pod, PodList
 from celium.resources.base import BaseAsyncResource
 from celium.resources.pods.pods_core import _PodsCore
@@ -170,4 +170,121 @@ class AsyncPods(BaseAsyncResource, _PodsCore):
                 await self._client.templates.delete(template.id)
             logger.error(f"Error deploying pod: {e}")
             raise e
+
+    async def list_machines(
+        self,
+        gpu_type: str | None = None,
+        min_gpu_count: int | None = None,
+        max_gpu_count: int | None = None,
+        max_price_per_hour: float | None = None,
+        min_price_per_hour: float | None = None,
+        sort_by: str = "price",  # Options: "price", "gpu_count", "uptime"
+        sort_order: str = "asc",  # Options: "asc", "desc"
+        min_uptime_minutes: int | None = None,
+        max_uptime_minutes: int | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        max_distance_mile: float | None = None,
+    ) -> List[Executor]:
+        """
+        List available machines with a user-friendly interface.
+
+        This function provides an easy way to find available machines based on various criteria.
+        It supports filtering by GPU type, count, price, and uptime, as well as sorting options.
+
+        :param gpu_type: Filter by GPU type (e.g., "A6000", "H100", "A100"). Can be a comma-separated list.
+                        Examples: "A6000", "H100,A100", "RTX 4090"
+        :type gpu_type: str or None
+        :param min_gpu_count: Minimum number of GPUs required
+        :type min_gpu_count: int or None
+        :param max_gpu_count: Maximum number of GPUs required
+        :type max_gpu_count: int or None
+        :param max_price_per_hour: Maximum price per hour in USD
+        :type max_price_per_hour: float or None
+        :param min_price_per_hour: Minimum price per hour in USD
+        :type min_price_per_hour: float or None
+        :param sort_by: Field to sort results by. Options: "price", "gpu_count", "uptime"
+        :type sort_by: str
+        :param sort_order: Sort order. Options: "asc" (ascending) or "desc" (descending)
+        :type sort_order: str
+        :param min_uptime_minutes: Minimum uptime in minutes
+        :type min_uptime_minutes: int or None
+        :param max_uptime_minutes: Maximum uptime in minutes
+        :type max_uptime_minutes: int or None
+        :return: List of available machines matching the criteria
+        :rtype: List[Executor]
+
+        Example usage:
+            >>> async with celium.AsyncClient() as client:
+            ...     # List all A6000 machines
+            ...     machines = await client.pods.list_machines(gpu_type="A6000")
+            ...     
+            ...     # List machines with 2-4 GPUs, sorted by price
+            ...     machines = await client.pods.list_machines(
+            ...         min_gpu_count=2,
+            ...         max_gpu_count=4,
+            ...         sort_by="price",
+            ...         sort_order="asc"
+            ...     )
+            ...     
+            ...     # List machines under $5/hour with at least 1 hour uptime
+            ...     machines = await client.pods.list_machines(
+            ...         max_price_per_hour=5.0,
+            ...         min_uptime_minutes=60
+            ...     )
+            ...     
+            ...     # List multiple GPU types, sorted by GPU count
+            ...     machines = await client.pods.list_machines(
+            ...         gpu_type="H100,A100",
+            ...         sort_by="gpu_count",
+            ...         sort_order="desc"
+            ...     )
+        """
+        filter_query = {}
+        
+        if gpu_type:
+            filter_query["machine_names"] = gpu_type.split(",")
+        
+        if min_gpu_count is not None:
+            filter_query["gpu_count_gte"] = min_gpu_count
+            
+        if max_gpu_count is not None:
+            filter_query["gpu_count_lte"] = max_gpu_count
+            
+        if max_price_per_hour is not None:
+            filter_query["price_per_hour_lte"] = max_price_per_hour
+            
+        if min_price_per_hour is not None:
+            filter_query["price_per_hour_gte"] = min_price_per_hour
+
+        if min_uptime_minutes is not None:
+            filter_query["uptime_minutes_gte"] = min_uptime_minutes
+
+        if max_uptime_minutes is not None:
+            filter_query["uptime_minutes_lte"] = max_uptime_minutes
+    
+        location_params = [lat, lon, max_distance_mile]
+        if any(location_params) and not all(location_params):
+            raise ValueError("lat, lon, and max_distance_mile must all be provided together or not at all.")
+        
+        # Filter by location
+        if lat is not None:
+            filter_query["lat"] = lat
+        if lon is not None:
+            filter_query["lon"] = lon
+        if max_distance_mile is not None:
+            filter_query["max_distance_mile"] = max_distance_mile
+
+        # Get the executors
+        executors = await self.list_executors(filter_query)
+
+        # Sort the results
+        if sort_by == "price":
+            executors.sort(key=lambda x: x.price_per_hour, reverse=(sort_order == "desc"))
+        elif sort_by == "gpu_count":
+            executors.sort(key=lambda x: x.specs.gpu.count, reverse=(sort_order == "desc"))
+        elif sort_by == "uptime":
+            executors.sort(key=lambda x: x.uptime_in_minutes or 0, reverse=(sort_order == "desc"))
+
+        return executors
 
