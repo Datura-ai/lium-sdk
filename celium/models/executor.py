@@ -116,3 +116,8 @@ class ExecutorForPod(_ExecutorBase):
 class ExecutorStatus(_FrozenBase):
     logs: list[dict]
     
+
+class DockerImageInfo(_FrozenBase):
+  docker_image: str
+  docker_image_tag: str
+  docker_image_size: int

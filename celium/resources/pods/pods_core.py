@@ -1,6 +1,6 @@
 from typing import Any
 
-from celium.models.executor import ExecutorFilterQuery, Executor
+from celium.models.executor import ExecutorFilterQuery, Executor, DockerImageInfo
 from celium.models.pod import Pod, PodList
 from celium.utils.machine import get_corrected_machine_names
 
@@ -40,3 +40,6 @@ class _PodsCore:
             count, machine_query = machine_query.split("x")
             count = int(count)
         return machine_query.split(","), count
+    
+    def _parse_docker_image_info(self, data: dict[str, str, int]) -> DockerImageInfo:
+        return DockerImageInfo.model_validate(data)

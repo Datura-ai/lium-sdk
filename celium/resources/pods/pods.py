@@ -8,7 +8,7 @@ from celium.models.pod import Pod, PodList
 from celium.utils.logging import logger
 from celium.resources.base import BaseResource
 from celium.resources.pods.pods_core import _PodsCore
-from celium.models.executor import Executor, ExecutorFilterQuery
+from celium.models.executor import Executor, ExecutorFilterQuery, DockerImageInfo
 
 
 class Pods(BaseResource, _PodsCore):
@@ -180,3 +180,17 @@ class Pods(BaseResource, _PodsCore):
             logger.error(f"Error deploying pod: {e}")
             raise e
 
+    def default_docker_image(self, gpu_model: str, driver_version: str) -> str:
+        """
+        Get the default docker image available for the given gpu model and driver version.
+
+        :param gpu_model: The model of the gpu.
+        :type gpu_model: str
+        :param driver_version: The version of the driver.
+        :type driver_version: str
+        :return: The default docker image.
+        :rtype: DockerImageInfo
+        """
+        resp = self._t.request("GET", f"/executors/default-docker-image?gpu_model={gpu_model}&driver_version={driver_version}")
+        docker_image_info = self._parse_docker_image_info(self._get_json(resp))
+        return docker_image_info
