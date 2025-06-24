@@ -116,6 +116,7 @@ class Pods(BaseResource, _PodsCore):
         template_id: str | None = None,
         additional_machine_filter: dict[str, Any] = {},
         pod_name: str | None = None,
+        use_default_docker_image: bool = True
     ) -> Pod:
         """
         Easy deploy a pod. 
@@ -137,6 +138,8 @@ class Pods(BaseResource, _PodsCore):
         :type additional_machine_filter: dict[str, Any]
         :param pod_name: The name of the pod.
         :type pod_name: str or None
+        :param use_default_docker_image: Whether to use the default docker image for the pod.
+        :type use_default_docker_image: bool, optional
         :return: The created pod.
         :rtype: Pod
         """
@@ -172,6 +175,12 @@ class Pods(BaseResource, _PodsCore):
                 raise Exception("No ssh keys found, please add a ssh key to your account")
             logger.debug(f"Found {len(ssh_keys)} ssh keys")
 
+            if use_default_docker_image:
+                default_docker_image = self.default_docker_image(executors[0].machine_name, executors[0].specs.gpu.driver)
+                templates = self._client.templates.list()
+                default_template = next((t for t in templates if t.docker_image == default_docker_image.docker_image and t.docker_image_tag == default_docker_image.docker_image_tag), None)
+                template = default_template
+
             # Create the pod
             return self.create(executors[0].id, pod_name or f"celium-pod-{uuid.uuid4()}", template.id, [ssh_keys[0].public_key])
         except Exception as e:
@@ -180,7 +189,7 @@ class Pods(BaseResource, _PodsCore):
             logger.error(f"Error deploying pod: {e}")
             raise e
 
-    def default_docker_image(self, gpu_model: str, driver_version: str) -> str:
+    def default_docker_image(self, gpu_model: str, driver_version: str) -> DockerImageInfo:
         """
         Get the default docker image available for the given gpu model and driver version.
 
