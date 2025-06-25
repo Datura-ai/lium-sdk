@@ -8,7 +8,7 @@ from celium.models.pod import Pod, PodList
 from celium.utils.logging import logger
 from celium.resources.base import BaseResource
 from celium.resources.pods.pods_core import _PodsCore
-from celium.models.executor import Executor, ExecutorFilterQuery
+from celium.models.executor import Executor, ExecutorFilterQuery, DockerImageInfo
 
 
 class Pods(BaseResource, _PodsCore):
@@ -116,6 +116,7 @@ class Pods(BaseResource, _PodsCore):
         template_id: str | None = None,
         additional_machine_filter: dict[str, Any] = {},
         pod_name: str | None = None,
+        use_default_docker_image: bool = True
     ) -> Pod:
         """
         Easy deploy a pod. 
@@ -137,6 +138,8 @@ class Pods(BaseResource, _PodsCore):
         :type additional_machine_filter: dict[str, Any]
         :param pod_name: The name of the pod.
         :type pod_name: str or None
+        :param use_default_docker_image: Whether to use the default docker image for the pod.
+        :type use_default_docker_image: bool, optional
         :return: The created pod.
         :rtype: Pod
         """
@@ -158,10 +161,18 @@ class Pods(BaseResource, _PodsCore):
             logger.debug(f"Found {len(executors)} executors for machine query: {machine_query}")
             
             if not template_id:
-                # Find the template to deploy 
-                is_one_time_template, template = self._client.templates.create_from_image_or_dockerfile(
-                    docker_image, dockerfile
-                )
+                if use_default_docker_image:
+                    default_docker_image = self.default_docker_image(executors[0].machine_name, executors[0].specs.gpu.driver)
+                    templates = self._client.templates.list()
+                    default_template = next((t for t in templates if t.docker_image == default_docker_image.docker_image and t.docker_image_tag == default_docker_image.docker_image_tag), None)
+                    if default_template is None:
+                        raise Exception(f"No default template found for docker image: {default_docker_image.docker_image}:{default_docker_image.docker_image_tag}")
+                    template = default_template
+                else:
+                    # Find the template to deploy 
+                    is_one_time_template, template = self._client.templates.create_from_image_or_dockerfile(
+                        docker_image, dockerfile
+                    )
             else:
                 template = self._client.templates.retrieve(template_id)
             logger.debug(f"Found template: {template.name}({template.id}-{template.docker_image}:{template.docker_image_tag})")
@@ -180,3 +191,17 @@ class Pods(BaseResource, _PodsCore):
             logger.error(f"Error deploying pod: {e}")
             raise e
 
+    def default_docker_image(self, gpu_model: str, driver_version: str) -> DockerImageInfo:
+        """
+        Get the default docker image available for the given gpu model and driver version.
+
+        :param gpu_model: The model of the gpu.
+        :type gpu_model: str
+        :param driver_version: The version of the driver.
+        :type driver_version: str
+        :return: The default docker image.
+        :rtype: DockerImageInfo
+        """
+        resp = self._t.request("GET", f"/executors/default-docker-image?gpu_model={gpu_model}&driver_version={driver_version}")
+        docker_image_info = self._parse_docker_image_info(self._get_json(resp))
+        return docker_image_info
