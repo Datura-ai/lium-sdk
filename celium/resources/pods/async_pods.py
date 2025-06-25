@@ -152,10 +152,18 @@ class AsyncPods(BaseAsyncResource, _PodsCore):
             logger.debug(f"Found {len(executors)} executors for machine query: {machine_query}")
             
             if not template_id:
-                # Find the template to deploy 
-                is_one_time_template, template = await self._client.templates.create_from_image_or_dockerfile(
-                    docker_image, dockerfile
-                )   
+                if use_default_docker_image:
+                    default_docker_image = await self.default_docker_image(executors[0].machine_name, executors[0].specs.gpu.driver)
+                    templates = await self._client.templates.list()
+                    default_template = next((t for t in templates if t.docker_image == default_docker_image.docker_image and t.docker_image_tag == default_docker_image.docker_image_tag), None)
+                    if default_template is None:
+                        raise Exception(f"No default template found for docker image: {default_docker_image.docker_image}:{default_docker_image.docker_image_tag}")
+                    template = default_template
+                else:
+                    # Find the template to deploy 
+                    is_one_time_template, template = await self._client.templates.create_from_image_or_dockerfile(
+                        docker_image, dockerfile
+                    )   
             else:
                 template = await self._client.templates.retrieve(template_id)
             logger.debug(f"Found template: {template.name}({template.id}-{template.docker_image}:{template.docker_image_tag})")
@@ -165,12 +173,6 @@ class AsyncPods(BaseAsyncResource, _PodsCore):
             if len(ssh_keys) == 0:
                 raise Exception("No ssh keys found, please add a ssh key to your account")
             logger.debug(f"Found {len(ssh_keys)} ssh keys")
-
-            if use_default_docker_image:
-                default_docker_image = await self.default_docker_image(executors[0].machine_name, executors[0].specs.gpu.driver)
-                templates = await self._client.templates.list()
-                default_template = next((t for t in templates if t.docker_image == default_docker_image.docker_image and t.docker_image_tag == default_docker_image.docker_image_tag), None)
-                template = default_template
 
             # Create the pod
             return await self.create(executors[0].id, pod_name or f"celium-pod-{uuid.uuid4()}", template.id, [ssh_keys[0].public_key])
