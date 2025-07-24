@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "celium-sdk"
+name = "lium-sdk"
 version = "0.1.3"
-description = "A Python SDK for Celium API."
+description = "A Python SDK for Lium API."
 authors = [{ name = "Waris Ali" }]
 readme = "README.md"
 requires-python = ">=3.9"
@@ -27,8 +27,8 @@ docs = [
 
 [project.urls]
 # more details can be found here
-homepage = "https://github.com/Datura-ai/celium-sdk"
-Repository = "https://github.com/Datura-ai/celium-sdk"
+homepage = "https://github.com/Datura-ai/lium-sdk"
+Repository = "https://github.com/Datura-ai/lium-sdk"
 
 [tool.flit.metadata]
 classifiers = [
@@ -49,4 +49,4 @@ classifiers = [
 ]
 
 [tool.setuptools]
-package-dir = { "celium" = "celium" }
+package-dir = { "lium" = "lium" }

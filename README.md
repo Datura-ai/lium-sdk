@@ -1,6 +1,6 @@
-# Celium SDK
+# Lium SDK
 
-A Python SDK for interacting with the Celium API.
+A Python SDK for interacting with the Lium API.
 
 ## Table of Contents
 
@@ -20,9 +20,9 @@ pip install .
 ## Usage
 
 ```python
-import celium
+import lium
 
-with celium.Client(api_key="your-key") as client:
+with lium.Client(api_key="your-key") as client:
     pods = client.pods.list()
 ```
 
@@ -31,8 +31,8 @@ with celium.Client(api_key="your-key") as client:
 To set up the development environment, clone the repository and install the dependencies:
 
 ```bash
-git clone https://github.com/your-username/celium-sdk.git
-cd celium-sdk
+git clone https://github.com/your-username/lium-sdk.git
+cd lium-sdk
 pip install -e .
 ```
 

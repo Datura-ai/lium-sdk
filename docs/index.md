@@ -1,23 +1,23 @@
-# Celium SDK
+# Lium SDK
 
 ## Installation
 
 ```bash
-pip install celium-sdk
+pip install lium-sdk
 ```
 
 ## Resource Examples
 
-Below are some examples of how to use the Celium SDK to interact with resources.
+Below are some examples of how to use the Lium SDK to interact with resources.
 
 ### List Pods
 
 ```python
-import celium
+import lium
 
 # Ensure you have your API_KEY set as an environment variable or pass it directly
-# client = celium.Client(api_key="YOUR_API_KEY")
-with celium.Client() as client:
+# client = lium.Client(api_key="YOUR_API_KEY")
+with lium.Client() as client:
     pods = client.pods.list()
     for pod in pods:
         print(f"Pod ID: {pod.id}, Status: {pod.status}")
@@ -26,11 +26,11 @@ with celium.Client() as client:
 ### Easy Deploy a Pod
 
 ```python
-import celium
+import lium
 
 # Ensure you have your API_KEY set as an environment variable or pass it directly
-# client = celium.Client(api_key="YOUR_API_KEY")
-with celium.Client() as client:
+# client = lium.Client(api_key="YOUR_API_KEY")
+with lium.Client() as client:
     # Example: Deploy a pod on a machine with 1 NVIDIA RTX A6000 GPU using a specific docker image
     # Replace with your desired machine_query and docker_image or dockerfile/template_id
     try:
@@ -38,7 +38,7 @@ with celium.Client() as client:
             machine_query="1xA6000", 
             docker_image="your_docker_image:latest", # Or use dockerfile="path/to/your/Dockerfile"
                                                   # Or use template_id="your_template_id"
-            pod_name="my-first-celium-pod"
+            pod_name="my-first-lium-pod"
         )
         print(f"Successfully deployed pod: {deployed_pod.name} with ID: {deployed_pod.id}")
     except Exception as e:
@@ -50,12 +50,12 @@ with celium.Client() as client:
 
 ```python
 import asyncio
-import celium
+import lium
 
 async def main():
     # Ensure you have your API_KEY set as an environment variable or pass it directly
-    # client = celium.AsyncClient(api_key="YOUR_API_KEY")
-    async with celium.AsyncClient() as client:
+    # client = lium.AsyncClient(api_key="YOUR_API_KEY")
+    async with lium.AsyncClient() as client:
         pods = await client.pods.list()
         for pod in pods:
             print(f"Pod ID: {pod.id}, Status: {pod.status}")
@@ -68,12 +68,12 @@ if __name__ == "__main__":
 
 ```python
 import asyncio
-import celium
+import lium
 
 async def main():
     # Ensure you have your API_KEY set as an environment variable or pass it directly
-    # client = celium.AsyncClient(api_key="YOUR_API_KEY")
-    async with celium.AsyncClient() as client:
+    # client = lium.AsyncClient(api_key="YOUR_API_KEY")
+    async with lium.AsyncClient() as client:
         # Example: Deploy a pod on a machine with 1 NVIDIA RTX A6000 GPU using a specific docker image
         # Replace with your desired machine_query and docker_image or dockerfile/template_id
         try:
@@ -81,7 +81,7 @@ async def main():
                 machine_query="1xA6000", 
                 docker_image="your_docker_image:latest", # Or use dockerfile="path/to/your/Dockerfile"
                                                       # Or use template_id="your_template_id"
-                pod_name="my-first-async-celium-pod"
+                pod_name="my-first-async-lium-pod"
             )
             print(f"Successfully deployed pod: {deployed_pod.name} with ID: {deployed_pod.id}")
         except Exception as e:

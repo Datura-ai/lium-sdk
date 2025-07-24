@@ -4,7 +4,7 @@
 set -e
 
 # Define a name for your Docker image
-IMAGE_NAME="celium-sdk-docs"
+IMAGE_NAME="lium-sdk-docs"
 
 # Define the port to map from the host to the container
 HOST_PORT=8080
@@ -24,5 +24,5 @@ echo "Docker image built successfully: $IMAGE_NAME"
 echo "Running Docker container $IMAGE_NAME on port $HOST_PORT..."
 docker run -d -p $HOST_PORT:$CONTAINER_PORT --rm $IMAGE_NAME
 
-echo "Celium SDK documentation website is running on http://localhost:$HOST_PORT"
+echo "Lium SDK documentation website is running on http://localhost:$HOST_PORT"
 echo "To stop the container, run: docker ps (to find the container ID) and then docker stop <container_id>"
