@@ -1,13 +1,18 @@
+import configparser
 import hashlib
 import os
 import random  # Used for retry jitter
 import re
 import time
 
+from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import getLogger
+from pathlib import Path
 from typing import Any
 
+import paramiko
 import requests
 
 from dotenv import load_dotenv
@@ -25,27 +30,33 @@ class LiumAPIError(Exception):
 
 class LiumAuthenticationError(LiumAPIError):
     """API key authentication failed (401)"""
+
     pass
 
 
 class LiumRateLimitError(LiumAPIError):
     """Rate limit exceeded (429)"""
+
     pass
 
 
 class LiumServerError(LiumAPIError):
     """Server error (5xx)"""
+
     pass
 
 
 class LiumValidationError(LiumAPIError):
     """Request validation error (400, 422)"""
+
     pass
+
 
 # models.py
 @dataclass
 class PodInfo:
     """Information about a pod."""
+
     id: str
     name: str
     status: str
@@ -61,6 +72,7 @@ class PodInfo:
 @dataclass
 class ExecutorInfo:
     """Information about an executor."""
+
     id: str
     huid: str
     machine_name: str
@@ -74,20 +86,92 @@ class ExecutorInfo:
 
 
 # helpers.py
-def get_config_value(param: str) -> str:
-    pass
+def get_config_value(param: str) -> str | None:
+    """Get configuration value from ~/.lium/config.ini file."""
+    config_path = Path.home() / ".lium" / "config.ini"
+
+    if not config_path.exists():
+        return None
+
+    try:
+        config = configparser.ConfigParser()
+        config.read(config_path)
+
+        # Parse parameter like "api.api_key" -> section "api", key "api_key"
+        if "." in param:
+            section, key = param.split(".", 1)
+            return config.get(section, key, fallback=None)
+        else:
+            # If no section specified, try 'default' section
+            return config.get("default", param, fallback=None)
+    except (configparser.Error, OSError):
+        return None
 
 
 ADJECTIVES = [
-    "swift", "silent", "brave", "bright", "calm", "clever", "eager", "fierce", "gentle", "grand",
-    "happy", "jolly", "kind", "lively", "merry", "noble", "proud", "silly", "witty", "zesty",
-    "cosmic", "digital", "electric", "frozen", "golden", "hydro", "iron", "laser", "lunar", "solar"
+    "swift",
+    "silent",
+    "brave",
+    "bright",
+    "calm",
+    "clever",
+    "eager",
+    "fierce",
+    "gentle",
+    "grand",
+    "happy",
+    "jolly",
+    "kind",
+    "lively",
+    "merry",
+    "noble",
+    "proud",
+    "silly",
+    "witty",
+    "zesty",
+    "cosmic",
+    "digital",
+    "electric",
+    "frozen",
+    "golden",
+    "hydro",
+    "iron",
+    "laser",
+    "lunar",
+    "solar",
 ]  # 30 adjectives
 
 NOUNS = [
-    "hawk", "lion", "tiger", "eagle", "fox", "wolf", "shark", "viper", "cobra", "falcon",
-    "jaguar", "leopard", "lynx", "panther", "puma", "cougar", "condor", "raven", "photon", "quasar",
-    "vector", "matrix", "cipher", "pixel", "comet", "nebula", "nova", "orbit", "axiom", "sphinx"
+    "hawk",
+    "lion",
+    "tiger",
+    "eagle",
+    "fox",
+    "wolf",
+    "shark",
+    "viper",
+    "cobra",
+    "falcon",
+    "jaguar",
+    "leopard",
+    "lynx",
+    "panther",
+    "puma",
+    "cougar",
+    "condor",
+    "raven",
+    "photon",
+    "quasar",
+    "vector",
+    "matrix",
+    "cipher",
+    "pixel",
+    "comet",
+    "nebula",
+    "nova",
+    "orbit",
+    "axiom",
+    "sphinx",
 ]  # 30 nouns
 
 
@@ -139,6 +223,42 @@ def extract_gpu_model(machine_name: str) -> str:
 
     # If no pattern matches, return a shortened version
     return machine_name.split()[-1] if machine_name else "Unknown"
+
+
+def get_ssh_public_keys() -> list[str]:
+    """Reads SSH public key(s) from config path.
+
+    Returns:
+        A list of public key strings, or an empty list if not found or error.
+    """
+    public_key_path_str = get_config_value("ssh.key_path")
+    if not public_key_path_str:
+        return []
+
+    resolved_public_key_path = Path(public_key_path_str).expanduser()
+
+    if resolved_public_key_path.suffix != ".pub":
+        logger.error(f"ssh.key_path must end with .pub: {public_key_path_str}")
+        return []
+
+    public_keys: list[str] = []
+    if resolved_public_key_path.exists() and resolved_public_key_path.is_file():
+        try:
+            with open(resolved_public_key_path) as f:
+                for line in f:
+                    line = line.strip()
+                    # Basic validation for an SSH public key line
+                    if line and (line.startswith("ssh-") or line.startswith("ecdsa-")):
+                        public_keys.append(line)
+            if not public_keys:
+                logger.warning(f"No valid public keys found in {resolved_public_key_path}")
+        except (OSError, IOError):
+            logger.exception(f"Error reading public key file {resolved_public_key_path}")
+            return []
+    else:
+        logger.warning(f"Public key file not found at {resolved_public_key_path}")
+
+    return public_keys
 
 
 class Lium:
@@ -201,25 +321,28 @@ class Lium:
                 "4. Config file: ~/.lium/config.ini [api] api_key=..."
             )
 
-    def _get_api_key(self) -> str | None:
+    @staticmethod
+    def _get_api_key() -> str | None:
         """Get API key from environment or config file."""
         # Load .env file if it exists
         load_dotenv()
 
         # 1. Environment variable (including from .env file)
-        api_key = os.getenv('LIUM_API_KEY')
+        api_key = os.getenv("LIUM_API_KEY")
         if api_key:
             return api_key
 
         # 2. Config file
         return get_config_value("api.api_key")
 
-    def _generate_huid(self, executor_id: str) -> str:
+    @staticmethod
+    def _generate_huid(executor_id: str) -> str:
         """Generate human-readable ID from executor ID."""
         # Import locally to avoid circular dependencies
         return generate_human_id(executor_id)
 
-    def _extract_gpu_type(self, machine_name: str) -> str:
+    @staticmethod
+    def _extract_gpu_type(machine_name: str) -> str:
         """Extract GPU model from machine name."""
         # Import locally to avoid circular dependencies
         return extract_gpu_model(machine_name)
@@ -260,12 +383,7 @@ class Lium:
 
         for attempt in range(max_retries):
             try:
-                response = requests.request(
-                    method, url,
-                    headers=self.headers,
-                    timeout=timeout,
-                    **kwargs
-                )
+                response = requests.request(method, url, headers=self.headers, timeout=timeout, **kwargs)
 
                 # Handle response status
                 if response.ok:
@@ -274,17 +392,17 @@ class Lium:
                 # Parse error data
                 try:
                     error_data = response.json()
-                    error_msg = error_data.get('message', f'HTTP {response.status_code}')
-                except Exception:
+                    error_msg = error_data.get("message", f"HTTP {response.status_code}")
+                except (ValueError, requests.exceptions.JSONDecodeError):
                     error_data = None
-                    error_msg = f'HTTP {response.status_code}'
+                    error_msg = f"HTTP {response.status_code}"
 
                 # Map status codes to exceptions
                 status_errors = {
-                    401: (LiumAuthenticationError, 'Authentication failed'),
-                    400: (LiumValidationError, 'Invalid request'),
-                    422: (LiumValidationError, 'Validation error'),
-                    429: (LiumRateLimitError, 'Rate limit exceeded'),
+                    401: (LiumAuthenticationError, "Authentication failed"),
+                    400: (LiumValidationError, "Invalid request"),
+                    422: (LiumValidationError, "Validation error"),
+                    429: (LiumRateLimitError, "Rate limit exceeded"),
                 }
 
                 # Raise appropriate exception
@@ -304,7 +422,7 @@ class Lium:
                     raise
 
                 # Calculate delay with exponential backoff and jitter
-                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                delay = base_delay * (2**attempt) + random.uniform(0, 1)
                 logger.warning(
                     f"Request failed ({e.__class__.__name__}), "
                     f"retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})"
@@ -396,8 +514,13 @@ class Lium:
         response = self._make_request("GET", "/templates")
         return response.json()
 
-    def up(self, executor_id: str, pod_name: str = None, template_id: str | None = None,
-           ssh_public_keys: list[str] | None = None) -> dict[str, Any]:
+    def up(
+        self,
+        executor_id: str,
+        pod_name: str = None,
+        template_id: str | None = None,
+        ssh_public_keys: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Start a new pod on an executor.
 
@@ -422,11 +545,7 @@ class Lium:
         if not ssh_public_keys:
             raise ValueError("No SSH public keys found. Configure ssh.key_path or provide ssh_public_keys parameter.")
 
-        payload = {
-            "pod_name": pod_name,
-            "template_id": template_id,
-            "user_public_key": ssh_public_keys
-        }
+        payload = {"pod_name": pod_name, "template_id": template_id, "user_public_key": ssh_public_keys}
 
         # Get initial pod list to compare after creation
         initial_pods = {p.name: p.id for p in self.ps()}
@@ -435,7 +554,7 @@ class Lium:
         api_response = response.json()
 
         # If API response contains pod info, return it
-        if api_response and 'id' in api_response:
+        if api_response and "id" in api_response:
             return api_response
 
         # Otherwise, find the newly created pod by comparing pod lists
@@ -446,16 +565,16 @@ class Lium:
         for pod in current_pods:
             if pod.name == pod_name and pod.name not in initial_pods:
                 return {
-                    'id': pod.id,
-                    'name': pod.name,
-                    'status': pod.status,
-                    'huid': pod.huid,
-                    'ssh_cmd': pod.ssh_cmd,
-                    'executor_id': executor_id
+                    "id": pod.id,
+                    "name": pod.name,
+                    "status": pod.status,
+                    "huid": pod.huid,
+                    "ssh_cmd": pod.ssh_cmd,
+                    "executor_id": executor_id,
                 }
 
         # If we still can't find it, return what we have
-        return api_response or {'name': pod_name, 'executor_id': executor_id}
+        return api_response or {"name": pod_name, "executor_id": executor_id}
 
     def down(self, pod: str | PodInfo | None = None, executor_id: str | None = None) -> dict[str, Any]:
         """
@@ -486,35 +605,33 @@ class Lium:
 
     # SSH and Execution Methods
 
-    # def _get_ssh_private_key_path(self) -> Optional[Path]:
-    #     """Get SSH private key path from config."""
-    #     if self._ssh_key_path:
-    #         return self._ssh_key_path
-    #
-    #     # Import locally to avoid circular dependencies
-    #     from .config import get_config_value
-    #
-    #     key_path = get_config_value("ssh.key_path")
-    #     if key_path:
-    #         # Remove .pub extension if present
-    #         key_path = key_path.rstrip('.pub')
-    #         self._ssh_key_path = Path(key_path).expanduser()
-    #         return self._ssh_key_path
-    #
-    #     # Try common SSH key locations
-    #     for key_name in ["id_rsa", "id_ed25519", "id_ecdsa"]:
-    #         key_path = Path.home() / ".ssh" / key_name
-    #         if key_path.exists():
-    #             self._ssh_key_path = key_path
-    #             return self._ssh_key_path
-    #
-    #     return None
+    def _get_ssh_private_key_path(self) -> Path | None:
+        """Get SSH private key path from config."""
+        if self._ssh_key_path:
+            return self._ssh_key_path
 
-    # def _get_ssh_public_keys(self) -> List[str]:
-    #     """Get SSH public keys from config."""
-    #     # Import locally to avoid circular dependencies
-    #     from .config import get_ssh_public_keys
-    #     return get_ssh_public_keys()
+        # Import locally to avoid circular dependencies
+
+        key_path = get_config_value("ssh.key_path")
+        if key_path:
+            # Remove .pub extension if present
+            key_path = key_path.rstrip(".pub")
+            self._ssh_key_path = Path(key_path).expanduser()
+            return self._ssh_key_path
+
+        # Try common SSH key locations
+        for key_name in ["id_rsa", "id_ed25519", "id_ecdsa"]:
+            key_path = Path.home() / ".ssh" / key_name
+            if key_path.exists():
+                self._ssh_key_path = key_path
+                return self._ssh_key_path
+
+        return None
+
+    @staticmethod
+    def _get_ssh_public_keys() -> list[str]:
+        """Get SSH public keys from config."""
+        return get_ssh_public_keys()
 
     def _get_ssh_connection_info(self, pod: str | PodInfo) -> tuple[str, str, int]:
         """Get SSH connection info for a pod."""
@@ -525,9 +642,10 @@ class Lium:
 
         # Parse SSH command: "ssh user@host -p port"
         import shlex
+
         parts = shlex.split(pod_info.ssh_cmd)
         user_host = parts[1]
-        user, host = user_host.split('@')
+        user, host = user_host.split("@")
 
         port = 22
         if "-p" in parts:
@@ -537,8 +655,67 @@ class Lium:
 
         return user, host, port
 
-    def exec(self, pod: str | PodInfo, command: str, env_vars: dict[str, str] | None = None,
-             timeout: int = 30) -> dict[str, Any]:
+    @staticmethod
+    def _load_ssh_key(private_key_path: Path) -> paramiko.PKey:
+        """Load SSH private key trying different key types."""
+        for key_type in [paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey]:
+            try:
+                return key_type.from_private_key_file(str(private_key_path))
+            except paramiko.ssh_exception.SSHException:
+                logger.warning(f"Failed to load {key_type.__name__} from {private_key_path}. Trying next type.")
+                continue
+        raise ValueError("Could not load SSH private key")
+
+    def _prepare_ssh_client(self, pod: str | PodInfo, timeout: int = 30) -> paramiko.SSHClient:
+        """
+        Prepare and connect SSH client.
+
+        Args:
+            pod: Pod ID, name, HUID, or PodInfo object
+            timeout: SSH connection timeout
+
+        Returns:
+            Connected SSH client
+
+        Raises:
+            ValueError: If SSH key not found or cannot be loaded
+        """
+        # Get SSH key path
+        private_key_path = self._get_ssh_private_key_path()
+        if not private_key_path or not private_key_path.exists():
+            raise ValueError("SSH private key not found. Configure ssh.key_path in ~/.lium/config.ini")
+
+        # Load key and get connection info
+        loaded_key = self._load_ssh_key(private_key_path)
+        user, host, port = self._get_ssh_connection_info(pod)
+
+        # Connect
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.connect(hostname=host, port=port, username=user, pkey=loaded_key, timeout=timeout)
+
+        return ssh_client
+
+    @staticmethod
+    def _prepare_command(command: str, env_vars: dict[str, str] | None = None) -> str:
+        """
+        Add environment variables to command if needed.
+
+        Args:
+            command: Base command to execute
+            env_vars: Optional environment variables to set
+
+        Returns:
+            Command with environment variables prepended if any
+        """
+        if env_vars:
+            env_exports = " && ".join([f'export {k}="{v}"' for k, v in env_vars.items()])
+            return f"{env_exports} && {command}"
+        return command
+
+    def exec(
+        self, pod: str | PodInfo, command: str, env_vars: dict[str, str] | None = None, timeout: int = 30
+    ) -> dict[str, Any]:
         """
         Execute a command on a pod via SSH.
 
@@ -549,56 +726,132 @@ class Lium:
             timeout: SSH connection timeout
 
         Returns:
-            Dictionary with stdout, stderr, exit_code
+            Dictionary with stdout, stderr, exit_code, and success fields
         """
-        pass
+        ssh_client = self._prepare_ssh_client(pod, timeout)
+        command = self._prepare_command(command, env_vars)
 
-    #     private_key_path = self._get_ssh_private_key_path()
-    #     if not private_key_path or not private_key_path.exists():
-    #         raise ValueError("SSH private key not found. Configure ssh.key_path in ~/.lium/config.ini")
-    #
-    #     user, host, port = self._get_ssh_connection_info(pod)
-    #
-    #     # Prepare command with environment variables
-    #     if env_vars:
-    #         env_exports = ' && '.join([f'export {k}="{v}"' for k, v in env_vars.items()])
-    #         command = f"{env_exports} && {command}"
-    #
-    #     ssh_client = paramiko.SSHClient()
-    #     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    #
-    #     try:
-    #         # Load SSH key
-    #         key_types = [paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey, paramiko.DSSKey]
-    #         loaded_key = None
-    #
-    #         for key_type in key_types:
-    #             try:
-    #                 loaded_key = key_type.from_private_key_file(str(private_key_path))
-    #                 break
-    #             except paramiko.ssh_exception.SSHException:
-    #                 continue
-    #
-    #         if not loaded_key:
-    #             raise ValueError("Could not load SSH private key")
-    #
-    #         ssh_client.connect(hostname=host, port=port, username=user, pkey=loaded_key, timeout=timeout)
-    #         stdin, stdout, stderr = ssh_client.exec_command(command)
-    #
-    #         stdout_text = stdout.read().decode('utf-8', errors='replace')
-    #         stderr_text = stderr.read().decode('utf-8', errors='replace')
-    #         exit_code = stdout.channel.recv_exit_status()
-    #
-    #         return {
-    #             "stdout": stdout_text,
-    #             "stderr": stderr_text,
-    #             "exit_code": exit_code,
-    #             "success": exit_code == 0
-    #         }
-    #
-    #     finally:
-    #         ssh_client.close()
-    #
+        try:
+            stdin, stdout, stderr = ssh_client.exec_command(command)
+
+            stdout_text = stdout.read().decode("utf-8", errors="replace")
+            stderr_text = stderr.read().decode("utf-8", errors="replace")
+            exit_code = stdout.channel.recv_exit_status()
+
+            return {"stdout": stdout_text, "stderr": stderr_text, "exit_code": exit_code, "success": exit_code == 0}
+        finally:
+            ssh_client.close()
+
+    def stream_exec(
+        self, pod: str | PodInfo, command: str, env_vars: dict[str, str] | None = None, timeout: int = 30
+    ) -> Generator[dict[str, str], None, None]:
+        """
+        Execute a command on a pod via SSH with streaming output.
+
+        Args:
+            pod: Pod ID, name, HUID, or PodInfo object
+            command: Command to execute
+            env_vars: Environment variables to set
+            timeout: SSH connection timeout
+
+        Yields:
+            Dictionary with "type" ("stdout" or "stderr") and "data" (string chunk)
+        """
+        ssh_client = self._prepare_ssh_client(pod, timeout)
+        command = self._prepare_command(command, env_vars)
+
+        try:
+            stdin, stdout, stderr = ssh_client.exec_command(command, get_pty=True)
+            stdin.close()
+
+            channel = stdout.channel
+            channel.settimeout(0.1)  # Non-blocking with small timeout
+
+            while not channel.closed or channel.recv_ready() or channel.recv_stderr_ready():
+                # Read stdout
+                if channel.recv_ready():
+                    data = channel.recv(4096).decode("utf-8", errors="replace")
+                    if data:
+                        yield {"type": "stdout", "data": data}
+
+                # Read stderr
+                if channel.recv_stderr_ready():
+                    data = channel.recv_stderr(4096).decode("utf-8", errors="replace")
+                    if data:
+                        yield {"type": "stderr", "data": data}
+        finally:
+            ssh_client.close()
+
+    def _exec_single_pod_safe(
+        self, pod: str | PodInfo, command: str, env_vars: dict[str, str] | None = None, timeout: int = 30
+    ) -> dict[str, Any]:
+        """
+        Execute command on a single pod with error handling.
+
+        Args:
+            pod: Pod ID, name, HUID, or PodInfo object
+            command: Command to execute
+            env_vars: Environment variables to set
+            timeout: SSH connection timeout
+
+        Returns:
+            Dictionary with result including pod info and success flag
+        """
+        try:
+            exec_result = self.exec(pod, command, env_vars, timeout)
+        except Exception as e:
+            return {
+                "pod": pod.id if isinstance(pod, PodInfo) else pod,
+                "stdout": "",
+                "stderr": str(e),
+                "exit_code": -1,
+                "success": False,
+            }
+        else:
+            exec_result["pod"] = pod.id if isinstance(pod, PodInfo) else pod
+            return exec_result
+
+    def exec_all(
+        self,
+        pods: list[str | PodInfo],
+        command: str,
+        env_vars: dict[str, str] | None = None,
+        timeout: int = 30,
+        max_workers: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Execute command on multiple pods in parallel.
+
+        Args:
+            pods: List of pod identifiers (ID, name, HUID, or PodInfo objects)
+            command: Command to execute
+            env_vars: Environment variables to set
+            timeout: SSH connection timeout
+            max_workers: Maximum number of concurrent threads (default: min(32, len(pods)))
+
+        Returns:
+            List of execution results in the same order as input pods
+        """
+        if not pods:
+            return []
+
+        if max_workers is None:
+            max_workers = min(32, len(pods))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor_pool:
+            # Submit all tasks
+            futures = []
+            for pod in pods:
+                future = executor_pool.submit(self._exec_single_pod_safe, pod, command, env_vars, timeout)
+                futures.append(future)
+
+            # Collect results in order
+            result_list = []
+            for future in futures:
+                result_list.append(future.result())
+
+        return result_list
+
     def scp(self, pod: str | PodInfo, local_path: str, remote_path: str, timeout: int = 30) -> None:
         """
         Upload a file to a pod via SFTP.
@@ -644,8 +897,15 @@ class Lium:
     #         ssh_client.close()
     #
 
-    def rsync(self, pod: str | PodInfo, local_path: str, remote_path: str,
-              direction: str = "up", delete: bool = False, exclude: list[str] | None = None) -> bool:
+    def rsync(
+        self,
+        pod: str | PodInfo,
+        local_path: str,
+        remote_path: str,
+        direction: str = "up",
+        delete: bool = False,
+        exclude: list[str] | None = None,
+    ) -> bool:
         """
         Sync directories using rsync.
 
@@ -732,6 +992,7 @@ class Lium:
 
 # Convenience functions
 
+
 def init(api_key: str | None = None) -> Lium:
     """Create a Lium SDK client."""
     return Lium(api_key=api_key)
@@ -745,38 +1006,73 @@ def list_gpu_types(api_key: str | None = None) -> list[str]:
 
 
 if __name__ == "__main__":
-    # Example usage
+    # Demo script
+    print("=== Lium SDK Demo ===")
     lium = Lium()
+
+    # 1. List executors
+    print("1. Finding L40S executors...")
     executors = lium.ls("L40S")
-    executor_id = None
-    for executor in executors:
-        print(f"Executor: {executor.machine_name}, GPU Type: {executor.gpu_type}, HUID: {executor.huid}")
-        executor_id = executor.id
-        break
+    if not executors:
+        print("No L40S executors available")
+        exit(1)
+    executor = executors[0]
+    executor2 = executors[1]
+    print(f"   Using: {executor.machine_name} ({executor.huid})")
 
-    if not executor_id:
-        raise()
-
-
+    # 2. Get template
+    print("2. Getting templates...")
     templates = lium.get_templates()
-    template = next((t for t in templates if t['name'].lower() == 'dind'), None)
+    template = next((t for t in templates if t["name"].lower() == "dind"), None)
+    if not template:
+        print("No DIND template found")
+        exit(1)
+    print(f"   Using: {template['name']}")
 
-    result = lium.up(executor_id=executor_id, pod_name="Mik. test_pod", ssh_public_keys=['~/.ssh/id_rsa.pub'], template_id=template['id'])
-    print("Created pod:", result)
+    # 3. Create 2 pods
+    print("3. Creating 2 pods...")
+    pod1 = lium.up(executor.id, "demo-pod-1", template["id"])
+    pod2 = lium.up(executor2.id, "demo-pod-2", template["id"])
+    print(f"   Created: {pod1.get('name', 'pod1')} and {pod2.get('name', 'pod2')}")
 
-    lium.wait_for_pod_ready(result['executor_id'])
-    print("Pod is ready:", result['name'])
+    # 4. Wait for ready
+    print("4. Waiting for pods to be ready...")
+    lium.wait_for_pod_ready(pod1["id"])
+    lium.wait_for_pod_ready(pod2["id"])
+    print("   Both pods ready!")
 
+    # 5. Show ready pods
+    print("5. Listing active pods...")
+    pods = lium.ps()
+    for pod in pods:
+        print(f"   {pod.name} ({pod.huid}) - {pod.status}")
 
-    print("Available GPU types:", )
-    active_pods = lium.ps()
-    print("Active pods:", active_pods)
+    # 6. Single exec
+    print("6. Single exec test...")
+    result = lium.exec(pods[0], "echo 'Hello from single exec'")
+    print(f"   Result: {result['stdout'].strip()}")
 
-    for pod in active_pods:
-        print(f"Pod ID: {pod.id}, Name: {pod.name}, HUID: {pod.huid}, Status: {pod.status}")
+    # 7. Stream exec
+    print("7. Stream exec test...")
+    for chunk in lium.stream_exec(pods[0], 'for i in {1..3}; do echo "Count $i"; sleep 1; done'):
+        print(f"   [{chunk['type']}] {chunk['data']}", end="")
+
+    # 8. Batch exec
+    print("8. Batch exec test...")
+    results = lium.exec_all(pods, "uname -n")
+    for result in results:
+        status = "✓" if result["success"] else "✗"
+        print(f"   {status} {result['pod']}: {result['stdout'].strip()}")
+
+    # 9. Delete all
+    print("9. Cleaning up...")
+    for pod in pods:
         lium.rm(pod)
+    print("   All pods deleted")
 
-    # all pods deleted
-    active_pods = lium.ps()
-    print("Active pods after deletion:", active_pods)
-    # Add more example calls as needed
+    # 10. Verify cleanup
+    print("10. Verifying cleanup...")
+    final_pods = lium.ps()
+    print(f"    Active pods: {len(final_pods)}")
+
+    print("=== Demo Complete ===")
