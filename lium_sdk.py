@@ -1,16 +1,46 @@
-import os
-import re
-import json
-import time
 import hashlib
-import subprocess
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple, Union
+import os
+import random  # Used for retry jitter
+import re
+import time
+
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from logging import getLogger
+from typing import Any
 
 import requests
-import paramiko
+
+from dotenv import load_dotenv
+
+logger = getLogger(__name__)
+
+
+class LiumAPIError(Exception):
+    """Base exception for API errors"""
+
+    def __init__(self, message: str, response_data: dict | None = None):
+        super().__init__(message)
+        self.response_data = response_data
+
+
+class LiumAuthenticationError(LiumAPIError):
+    """API key authentication failed (401)"""
+    pass
+
+
+class LiumRateLimitError(LiumAPIError):
+    """Rate limit exceeded (429)"""
+    pass
+
+
+class LiumServerError(LiumAPIError):
+    """Server error (5xx)"""
+    pass
+
+
+class LiumValidationError(LiumAPIError):
+    """Request validation error (400, 422)"""
+    pass
 
 # models.py
 @dataclass
@@ -20,12 +50,12 @@ class PodInfo:
     name: str
     status: str
     huid: str
-    ssh_cmd: Optional[str]
-    ports: Dict[str, int]
+    ssh_cmd: str | None
+    ports: dict[str, int]
     created_at: str
     updated_at: str
-    executor: Dict[str, Any]
-    template: Dict[str, Any]
+    executor: dict[str, Any]
+    template: dict[str, Any]
 
 
 @dataclass
@@ -38,8 +68,8 @@ class ExecutorInfo:
     gpu_count: int
     price_per_hour: float
     price_per_gpu_hour: float
-    location: Dict[str, str]
-    specs: Dict[str, Any]
+    location: dict[str, str]
+    specs: dict[str, Any]
     status: str
 
 
@@ -47,17 +77,19 @@ class ExecutorInfo:
 def get_config_value(param: str) -> str:
     pass
 
+
 ADJECTIVES = [
     "swift", "silent", "brave", "bright", "calm", "clever", "eager", "fierce", "gentle", "grand",
     "happy", "jolly", "kind", "lively", "merry", "noble", "proud", "silly", "witty", "zesty",
     "cosmic", "digital", "electric", "frozen", "golden", "hydro", "iron", "laser", "lunar", "solar"
-] # 30 adjectives
+]  # 30 adjectives
 
 NOUNS = [
     "hawk", "lion", "tiger", "eagle", "fox", "wolf", "shark", "viper", "cobra", "falcon",
     "jaguar", "leopard", "lynx", "panther", "puma", "cougar", "condor", "raven", "photon", "quasar",
     "vector", "matrix", "cipher", "pixel", "comet", "nebula", "nova", "orbit", "axiom", "sphinx"
-] # 30 nouns
+]  # 30 nouns
+
 
 def generate_human_id(executor_id: str) -> str:
     """Generates a deterministic human-readable ID from the executor_id."""
@@ -113,6 +145,13 @@ class Lium:
     """
     Lium SDK for managing Celium Compute GPU pods.
 
+    API Key Configuration:
+        The SDK will look for the API key in the following order:
+        1. Constructor parameter: Lium(api_key="your-key")
+        2. Environment variable: LIUM_API_KEY
+        3. .env file: LIUM_API_KEY=your-key
+        4. Config file: ~/.lium/config.ini
+
     Example usage:
         # Initialize
         from lium import Lium
@@ -140,7 +179,7 @@ class Lium:
         lium.down("my-pod")
     """
 
-    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://lium.io/api"):
+    def __init__(self, api_key: str | None = None, base_url: str = "https://lium.io/api"):
         """
         Initialize Lium SDK.
 
@@ -154,11 +193,25 @@ class Lium:
         self._ssh_key_path = None
 
         if not self.api_key:
-            raise ValueError("API key is required. Set LIUM_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError(
+                "API key is required. Provide it via:\n"
+                "1. Constructor: Lium(api_key='...')\n"
+                "2. Environment: export LIUM_API_KEY='...'\n"
+                "3. .env file: LIUM_API_KEY=...\n"
+                "4. Config file: ~/.lium/config.ini [api] api_key=..."
+            )
 
-    def _get_api_key(self) -> Optional[str]:
+    def _get_api_key(self) -> str | None:
         """Get API key from environment or config file."""
-        # Import locally to avoid circular dependencies
+        # Load .env file if it exists
+        load_dotenv()
+
+        # 1. Environment variable (including from .env file)
+        api_key = os.getenv('LIUM_API_KEY')
+        if api_key:
+            return api_key
+
+        # 2. Config file
         return get_config_value("api.api_key")
 
     def _generate_huid(self, executor_id: str) -> str:
@@ -171,7 +224,7 @@ class Lium:
         # Import locally to avoid circular dependencies
         return extract_gpu_model(machine_name)
 
-    def _resolve_pod(self, pod: Union[str, PodInfo]) -> PodInfo:
+    def _resolve_pod(self, pod: str | PodInfo) -> PodInfo:
         """
         Resolve pod identifier to PodInfo object.
 
@@ -196,16 +249,77 @@ class Lium:
 
         return found_pod
 
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
-        """Make HTTP request to API."""
+    def _make_request(self, method: str, endpoint: str, timeout: int = 30, **kwargs) -> requests.Response:
+        """Make HTTP request to API with retry and proper error handling."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        response = requests.request(method, url, headers=self.headers, **kwargs)
-        response.raise_for_status()
-        return response
+
+        # Retry configuration
+        max_retries = 6
+        base_delay = 1.0
+        retryable_errors = (LiumRateLimitError, LiumServerError, requests.exceptions.RequestException)
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.request(
+                    method, url,
+                    headers=self.headers,
+                    timeout=timeout,
+                    **kwargs
+                )
+
+                # Handle response status
+                if response.ok:
+                    return response
+
+                # Parse error data
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get('message', f'HTTP {response.status_code}')
+                except Exception:
+                    error_data = None
+                    error_msg = f'HTTP {response.status_code}'
+
+                # Map status codes to exceptions
+                status_errors = {
+                    401: (LiumAuthenticationError, 'Authentication failed'),
+                    400: (LiumValidationError, 'Invalid request'),
+                    422: (LiumValidationError, 'Validation error'),
+                    429: (LiumRateLimitError, 'Rate limit exceeded'),
+                }
+
+                # Raise appropriate exception
+                if response.status_code in status_errors:
+                    exc_class, default_msg = status_errors[response.status_code]
+                    raise exc_class(error_msg or default_msg, error_data)
+                elif 500 <= response.status_code < 600:
+                    raise LiumServerError(f"Server error: {response.status_code}", error_data)
+                else:
+                    raise LiumAPIError(f"Unexpected API error: {response.status_code}", error_data)
+
+            except retryable_errors as e:
+                # Check if we should retry
+                if attempt == max_retries - 1:
+                    if isinstance(e, requests.exceptions.RequestException):
+                        raise LiumAPIError(f"Connection error: {e!s}") from e
+                    raise
+
+                # Calculate delay with exponential backoff and jitter
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(
+                    f"Request failed ({e.__class__.__name__}), "
+                    f"retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})"
+                )
+                time.sleep(delay)
+
+            except Exception:
+                # Non-retryable errors - re-raise immediately
+                raise
+
+        raise LiumAPIError("Request failed after all retries")
 
     # Core API Methods
 
-    def ls(self, gpu_type: Optional[str] = None) -> List[ExecutorInfo]:
+    def ls(self, gpu_type: str | None = None) -> list[ExecutorInfo]:
         """
         List available executors.
 
@@ -244,7 +358,7 @@ class Lium:
 
         return executors
 
-    def ps(self) -> List[PodInfo]:
+    def ps(self) -> list[PodInfo]:
         """
         List active pods.
 
@@ -272,7 +386,7 @@ class Lium:
 
         return pods
 
-    def get_templates(self) -> List[Dict[str, Any]]:
+    def get_templates(self) -> list[dict[str, Any]]:
         """
         Get available templates.
 
@@ -282,8 +396,8 @@ class Lium:
         response = self._make_request("GET", "/templates")
         return response.json()
 
-    def up(self, executor_id: str, pod_name: str = None, template_id: Optional[str] = None,
-           ssh_public_keys: Optional[List[str]] = None) -> Dict[str, Any]:
+    def up(self, executor_id: str, pod_name: str = None, template_id: str | None = None,
+           ssh_public_keys: list[str] | None = None) -> dict[str, Any]:
         """
         Start a new pod on an executor.
 
@@ -343,7 +457,7 @@ class Lium:
         # If we still can't find it, return what we have
         return api_response or {'name': pod_name, 'executor_id': executor_id}
 
-    def down(self, pod: Optional[Union[str, PodInfo]] = None, executor_id: Optional[str] = None) -> Dict[str, Any]:
+    def down(self, pod: str | PodInfo | None = None, executor_id: str | None = None) -> dict[str, Any]:
         """
         Stop a pod.
 
@@ -396,7 +510,7 @@ class Lium:
     #     from .config import get_ssh_public_keys
     #     return get_ssh_public_keys()
 
-    def _get_ssh_connection_info(self, pod: Union[str, PodInfo]) -> Tuple[str, str, int]:
+    def _get_ssh_connection_info(self, pod: str | PodInfo) -> tuple[str, str, int]:
         """Get SSH connection info for a pod."""
         pod_info = self._resolve_pod(pod)
 
@@ -417,8 +531,8 @@ class Lium:
 
         return user, host, port
 
-    def exec(self, pod: Union[str, PodInfo], command: str, env_vars: Optional[Dict[str, str]] = None,
-             timeout: int = 30) -> Dict[str, Any]:
+    def exec(self, pod: str | PodInfo, command: str, env_vars: dict[str, str] | None = None,
+             timeout: int = 30) -> dict[str, Any]:
         """
         Execute a command on a pod via SSH.
 
@@ -432,6 +546,7 @@ class Lium:
             Dictionary with stdout, stderr, exit_code
         """
         pass
+
     #     private_key_path = self._get_ssh_private_key_path()
     #     if not private_key_path or not private_key_path.exists():
     #         raise ValueError("SSH private key not found. Configure ssh.key_path in ~/.lium/config.ini")
@@ -478,7 +593,7 @@ class Lium:
     #     finally:
     #         ssh_client.close()
     #
-    def scp(self, pod: Union[str, PodInfo], local_path: str, remote_path: str, timeout: int = 30) -> None:
+    def scp(self, pod: str | PodInfo, local_path: str, remote_path: str, timeout: int = 30) -> None:
         """
         Upload a file to a pod via SFTP.
 
@@ -489,6 +604,7 @@ class Lium:
             timeout: Connection timeout
         """
         pass
+
     #     private_key_path = self._get_ssh_private_key_path()
     #     if not private_key_path or not private_key_path.exists():
     #         raise ValueError("SSH private key not found")
@@ -522,9 +638,8 @@ class Lium:
     #         ssh_client.close()
     #
 
-
-    def rsync(self, pod: Union[str, PodInfo], local_path: str, remote_path: str,
-                       direction: str = "up", delete: bool = False, exclude: Optional[List[str]] = None) -> bool:
+    def rsync(self, pod: str | PodInfo, local_path: str, remote_path: str,
+              direction: str = "up", delete: bool = False, exclude: list[str] | None = None) -> bool:
         """
         Sync directories using rsync.
 
@@ -572,7 +687,7 @@ class Lium:
 
     # Utility Methods
 
-    def wait_for_pod_ready(self, pod: Union[str, PodInfo], max_wait: int = 300, check_interval: int = 10) -> bool:
+    def wait_for_pod_ready(self, pod: str | PodInfo, max_wait: int = 300, check_interval: int = 10) -> bool:
         """
         Wait for a pod to be ready.
 
@@ -598,12 +713,12 @@ class Lium:
 
         return False
 
-    def get_pod_by_name(self, name: str) -> Optional[PodInfo]:
+    def get_pod_by_name(self, name: str) -> PodInfo | None:
         """Get pod by name or HUID."""
         pods = self.ps()
         return next((p for p in pods if p.name == name or p.huid == name), None)
 
-    def get_executor_by_huid(self, huid: str) -> Optional[ExecutorInfo]:
+    def get_executor_by_huid(self, huid: str) -> ExecutorInfo | None:
         """Get executor by HUID."""
         executors = self.ls()
         return next((e for e in executors if e.huid == huid), None)
@@ -611,22 +726,21 @@ class Lium:
 
 # Convenience functions
 
-def init(api_key: Optional[str] = None) -> Lium:
+def init(api_key: str | None = None) -> Lium:
     """Create a Lium SDK client."""
     return Lium(api_key=api_key)
 
 
-def list_gpu_types(api_key: Optional[str] = None) -> List[str]:
+def list_gpu_types(api_key: str | None = None) -> list[str]:
     """Get list of available GPU types."""
     client = Lium(api_key=api_key)
     executors = client.ls()
     return list(set(e.gpu_type for e in executors))
 
 
-
 if __name__ == "__main__":
     # Example usage
-    lium = Lium(api_key="")
+    lium = Lium()
     print("Available GPU types:", lium.ls())
     print("Active pods:", lium.ps())
     # Add more example calls as needed

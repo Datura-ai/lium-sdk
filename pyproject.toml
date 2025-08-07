@@ -16,6 +16,7 @@ dependencies = [
     "build>=0.10.0",
     "loguru>=0.7.0",
     "paramiko>=3.5.1",
+    "python-dotenv>=1.1.1",
 ]
 
 [project.optional-dependencies]
