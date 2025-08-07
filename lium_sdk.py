@@ -478,6 +478,12 @@ class Lium:
         response = self._make_request("DELETE", f"/executors/{executor_id}/rent")
         return response.json()
 
+    def rm(self, pod: str | PodInfo | None = None, executor_id: str | None = None) -> dict[str, Any]:
+        """
+        stop a pod. same as down
+        """
+        return self.down(pod, executor_id)
+
     # SSH and Execution Methods
 
     # def _get_ssh_private_key_path(self) -> Optional[Path]:
@@ -741,6 +747,36 @@ def list_gpu_types(api_key: str | None = None) -> list[str]:
 if __name__ == "__main__":
     # Example usage
     lium = Lium()
-    print("Available GPU types:", lium.ls())
-    print("Active pods:", lium.ps())
+    executors = lium.ls("L40S")
+    executor_id = None
+    for executor in executors:
+        print(f"Executor: {executor.machine_name}, GPU Type: {executor.gpu_type}, HUID: {executor.huid}")
+        executor_id = executor.id
+        break
+
+    if not executor_id:
+        raise()
+
+
+    templates = lium.get_templates()
+    template = next((t for t in templates if t['name'].lower() == 'dind'), None)
+
+    result = lium.up(executor_id=executor_id, pod_name="Mik. test_pod", ssh_public_keys=['~/.ssh/id_rsa.pub'], template_id=template['id'])
+    print("Created pod:", result)
+
+    lium.wait_for_pod_ready(result['executor_id'])
+    print("Pod is ready:", result['name'])
+
+
+    print("Available GPU types:", )
+    active_pods = lium.ps()
+    print("Active pods:", active_pods)
+
+    for pod in active_pods:
+        print(f"Pod ID: {pod.id}, Name: {pod.name}, HUID: {pod.huid}, Status: {pod.status}")
+        lium.rm(pod)
+
+    # all pods deleted
+    active_pods = lium.ps()
+    print("Active pods after deletion:", active_pods)
     # Add more example calls as needed
