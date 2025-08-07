@@ -662,7 +662,7 @@ class Lium:
             try:
                 return key_type.from_private_key_file(str(private_key_path))
             except paramiko.ssh_exception.SSHException:
-                logger.warning(f"Failed to load {key_type.__name__} from {private_key_path}. Trying next type.")
+                logger.debug(f"Failed to load {key_type.__name__} from {private_key_path}. Trying next type.")
                 continue
         raise ValueError("Could not load SSH private key")
 
@@ -1058,8 +1058,8 @@ if __name__ == "__main__":
         print(f"   [{chunk['type']}] {chunk['data']}", end="")
 
     # 8. Batch exec
-    print("8. Batch exec test...")
-    results = lium.exec_all(pods, "uname -n")
+    print("8. Batch exec test... (curl ifconfig.me)")
+    results = lium.exec_all(pods, "curl ifconfig.me")
     for result in results:
         status = "✓" if result["success"] else "✗"
         print(f"   {status} {result['pod']}: {result['stdout'].strip()}")
