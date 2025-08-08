@@ -72,6 +72,17 @@ class PodInfo:
         return int(self.ssh_cmd.split('-p ')[1].split()[0])
 
 @dataclass
+class Template:
+    status: str
+    id: str
+    name: str
+    huid: str
+    docker_image: str
+    docker_image_tag: str
+    category: str
+
+
+@dataclass
 class Config:
     api_key: str
     base_url: str = "https://lium.io/api"
@@ -165,7 +176,7 @@ class Lium:
         self.config = config or Config.load()
         self.headers = {"X-API-KEY": self.config.api_key}
         self._pods_cache = {}
-    
+
     @with_retry()
     def _request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Make API request with error handling."""
@@ -239,9 +250,29 @@ class Lium:
         
         return pods
     
-    def templates(self) -> List[Dict[str, Any]]:
+    def templates(self, filter: Optional[str] = None) -> List[Template]:
         """List available templates (Unix-style: like 'ls' for templates)."""
-        return self._request("GET", "/templates").json()
+        data = self._request("GET", "/templates").json()
+        templates = [
+            Template(
+                id=d.get("id", ""),
+                huid=generate_huid(d.get("id", "")),
+                name=d.get("name", ""),
+                docker_image=d.get("docker_image", ""),
+                docker_image_tag=d.get("docker_image_tag", "latest"),
+                category=d.get("category", "general"),
+                status=d.get("status", "unknown"),
+            )
+            for d in data
+        ]
+        if filter:
+            filter_lower = filter.lower()
+            templates = [
+                t for t in templates
+                if filter_lower in t.docker_image.lower() or filter_lower in t.name.lower()
+            ]
+
+        return templates
     
     def up(self, executor_id: str, pod_name: Optional[str] = None, 
            template_id: Optional[str] = None) -> Dict[str, Any]:
@@ -278,7 +309,7 @@ class Lium:
         current_pods = self.ps()
         for pod in current_pods:
             if pod.name == pod_name and pod.name not in initial_pods:
-                return {"id": pod.id, "name": pod.name, "status": pod.status, 
+                return {"id": pod.id, "name": pod.name, "status": pod.status,
                         "huid": pod.huid, "ssh_cmd": pod.ssh_cmd, "executor_id": executor_id}
         
         # If still not found, try one more time
@@ -319,6 +350,26 @@ class Lium:
                 return p
         
         raise ValueError(f"Pod '{pod}' not found")
+    
+    def get_executor(self, executor: Union[str, ExecutorInfo]) -> Optional[ExecutorInfo]:
+        """Get executor by ID or HUID."""
+        if isinstance(executor, ExecutorInfo):
+            return executor
+            
+        # Search in current executors
+        for e in self.ls():
+            if e.id == executor or e.huid == executor:
+                return e
+        
+        return None
+    
+    def get_template(self, template_id: Optional[str] = None) -> Optional[Template]:
+        """Get template ID, auto-selecting if None."""
+        templates = self.templates()
+        for t in templates:
+            if t.id == template_id or t.huid == template_id or t.name == template_id:
+                return t
+        return None
     
     @contextmanager
     def ssh_connection(self, pod: Union[str, PodInfo], timeout: int = 30):
@@ -421,7 +472,7 @@ class Lium:
         with ThreadPoolExecutor(max_workers=min(max_workers, len(pods))) as executor:
             return list(executor.map(exec_single, pods))
     
-    def wait_ready(self, pod: Union[str, PodInfo], timeout: int = 300) -> bool:
+    def wait_ready(self, pod: Union[str, PodInfo], timeout: int = 300) -> Optional[PodInfo]:
         """Wait for pod to be ready."""
         # Get the pod ID first
         if isinstance(pod, PodInfo):
@@ -438,10 +489,10 @@ class Lium:
             current = next((p for p in fresh_pods if p.id == pod_id), None)
             
             if current and current.status.upper() == "RUNNING" and current.ssh_cmd:
-                return True
+                return current
             
             time.sleep(10)
-        return False
+        return
     
     def scp(self, pod: Union[str, PodInfo], local: str, remote: str) -> None:
         """Upload file to pod."""
