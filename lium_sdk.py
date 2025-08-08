@@ -3,6 +3,7 @@ Lium SDK - Clean, Unix-style SDK for GPU pod management
 """
 import os
 import time
+import subprocess
 import hashlib
 import random
 import re
@@ -57,6 +58,18 @@ class PodInfo:
     updated_at: str
     executor: Dict
     template: Dict
+
+    @property
+    def host(self) -> Optional[str]:
+        return (re.findall(r'@(\S+)', self.ssh_cmd) or [None])[0] if self.ssh_cmd else None
+
+    @property
+    def username(self) -> Optional[str]:
+        return (re.findall(r'ssh (\S+)@', self.ssh_cmd) or [None])[0] if self.ssh_cmd else None
+
+    @property
+    def ssh_port(self) -> int:
+        return int(self.ssh_cmd.split('-p ')[1].split()[0])
 
 @dataclass
 class Config:
@@ -443,6 +456,31 @@ class Lium:
             sftp = client.open_sftp()
             sftp.get(remote, local)
             sftp.close()
+    
+    def upload(self, pod: Union[str, PodInfo], local: str, remote: str) -> None:
+        """Upload file to pod."""
+        self.scp(pod, local, remote)
+    
+    def ssh(self, pod: Union[str, PodInfo]) -> str:
+        """Get SSH command string."""
+        pod_info = self._resolve_pod(pod)
+        if not pod_info.ssh_cmd or not self.config.ssh_key_path:
+            raise ValueError("No SSH configured")
+        
+        return pod_info.ssh_cmd.replace("ssh ", f"ssh -i {self.config.ssh_key_path}")
+    
+    def rsync(self, pod: Union[str, PodInfo], local: str, remote: str) -> None:
+        """Sync directories with rsync."""
+        pod_info = self._resolve_pod(pod)
+        if not pod_info.ssh_cmd or not self.config.ssh_key_path:
+            raise ValueError("No SSH configured")
+
+        ssh_cmd = f"ssh -i {self.config.ssh_key_path} -p {pod_info.ssh_port} -o StrictHostKeyChecking=no"
+        cmd = ["rsync", "-avz", "-e", ssh_cmd, local,  f"{pod_info.username}@{pod_info.host}:{remote}"]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"Rsync failed: {result.stderr}")
 
 
 # ============= DEMO =============
