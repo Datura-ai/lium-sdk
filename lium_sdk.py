@@ -555,7 +555,7 @@ class Lium:
         if not pod_info.ssh_cmd or not self.config.ssh_key_path:
             raise ValueError("No SSH configured")
         
-        return pod_info.ssh_cmd.replace("ssh ", f"ssh -i {self.config.ssh_key_path}")
+        return pod_info.ssh_cmd.replace("ssh ", f"ssh -i {self.config.ssh_key_path} ")
     
     def rsync(self, pod: Union[str, PodInfo], local: str, remote: str) -> None:
         """Sync directories with rsync."""
