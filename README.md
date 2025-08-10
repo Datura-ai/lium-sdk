@@ -1,6 +1,6 @@
 # Lium SDK
 
-A Python SDK for interacting with the Lium API.
+A Python SDK for GPU pod management on the Lium platform.
 
 ## Table of Contents
 
@@ -14,16 +14,41 @@ A Python SDK for interacting with the Lium API.
 ## Installation
 
 ```bash
-pip install .
+pip install lium-sdk
 ```
 
 ## Usage
 
 ```python
-import lium
+from lium_sdk import Lium
 
-with lium.Client(api_key="your-key") as client:
-    pods = client.pods.list()
+# Initialize client (reads API key from LIUM_API_KEY env or ~/.lium/config.ini)
+lium = Lium()
+
+# List available executors
+executors = lium.ls()
+for executor in executors[:5]:
+    print(f"{executor.huid}: {executor.gpu_count}x{executor.gpu_type} @ ${executor.price_per_hour}/h")
+
+# Create a pod
+executor = executors[0]
+pod_info = lium.up(executor_id=executor.id, pod_name="my-pod")
+
+# List active pods
+pods = lium.ps()
+for pod in pods:
+    print(f"{pod.name}: {pod.status}")
+
+# Execute command on pod
+result = lium.exec(pod="my-pod", command="nvidia-smi")
+print(result["stdout"])
+
+# SSH into pod
+ssh_cmd = lium.ssh("my-pod")
+print(f"SSH command: {ssh_cmd}")
+
+# Stop pod
+lium.down("my-pod")
 ```
 
 ## Development
