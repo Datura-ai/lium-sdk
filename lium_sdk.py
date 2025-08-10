@@ -362,7 +362,15 @@ class Lium:
     def down(self, pod: Union[str, PodInfo]) -> Dict[str, Any]:
         """Stop a pod."""
         pod_info = self._resolve_pod(pod)
-        executor_id = pod_info.executor.get("id")
+        
+        # Handle both ExecutorInfo object and dict
+        if hasattr(pod_info.executor, 'id'):
+            executor_id = pod_info.executor.id
+        elif isinstance(pod_info.executor, dict):
+            executor_id = pod_info.executor.get("id")
+        else:
+            executor_id = None
+            
         if not executor_id:
             raise ValueError(f"No executor ID for pod {pod_info.name}")
         
