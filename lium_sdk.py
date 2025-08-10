@@ -1,38 +1,44 @@
-"""
-Lium SDK - Clean, Unix-style SDK for GPU pod management
-"""
-import os
-import time
-import subprocess
+"""Lium SDK - Clean, Unix-style SDK for GPU pod management."""
+
 import hashlib
+import os
 import random
 import re
-from pathlib import Path
-from dataclasses import dataclass
-from typing import Any, Optional, List, Dict, Union
-from contextlib import contextmanager
-from functools import wraps
+import shlex
+import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from dataclasses import dataclass
+from functools import wraps
+from pathlib import Path
+from typing import Any, Dict, Generator, List, Optional, Union
+
 import paramiko
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ============= EXCEPTIONS =============
+# Constants
+ADJECTIVES = ["swift", "brave", "calm", "eager", "gentle", "cosmic", "golden", "lunar", "zesty", "noble"]
+NOUNS = ["hawk", "lion", "eagle", "fox", "wolf", "shark", "raven", "matrix", "comet", "orbit"]
+
+
+# Exceptions
 class LiumError(Exception):
-    pass
+    """Base exception for Lium SDK."""
 
 class LiumAuthError(LiumError):
-    pass
+    """Authentication error."""
 
 class LiumRateLimitError(LiumError):
-    pass
+    """Rate limit exceeded."""
 
 class LiumServerError(LiumError):
-    pass
+    """Server error."""
 
-# ============= MODELS =============
+# Data Models
 @dataclass
 class ExecutorInfo:
     id: str
@@ -69,17 +75,21 @@ class PodInfo:
 
     @property
     def ssh_port(self) -> int:
+        """Extract SSH port from command."""
+        if not self.ssh_cmd or '-p ' not in self.ssh_cmd:
+            return 22
         return int(self.ssh_cmd.split('-p ')[1].split()[0])
 
 @dataclass
 class Template:
-    status: str
+    """Template information."""
     id: str
     name: str
     huid: str
     docker_image: str
     docker_image_tag: str
     category: str
+    status: str
 
 
 @dataclass
@@ -89,9 +99,8 @@ class Config:
     ssh_key_path: Optional[Path] = None
     
     @classmethod
-    def load(cls):
+    def load(cls) -> "Config":
         """Load config from env/file with smart defaults."""
-        # API key from env or config file
         api_key = os.getenv("LIUM_API_KEY")
         if not api_key:
             from configparser import ConfigParser
@@ -112,9 +121,11 @@ class Config:
                 ssh_key = key_path
                 break
         
-        return cls(api_key=api_key, 
-                  base_url=os.getenv("LIUM_BASE_URL", "https://lium.io/api"),
-                  ssh_key_path=ssh_key)
+        return cls(
+            api_key=api_key,
+            base_url=os.getenv("LIUM_BASE_URL", "https://lium.io/api"),
+            ssh_key_path=ssh_key
+        )
     
     @property
     def ssh_public_keys(self) -> List[str]:
@@ -127,14 +138,11 @@ class Config:
                 return [l.strip() for l in f if l.strip().startswith(('ssh-', 'ecdsa-'))]
         return []
 
-# ============= HELPERS =============
+# Helper Functions
 def generate_huid(id_str: str) -> str:
-    """Generate human-readable ID."""
+    """Generate human-readable ID from UUID."""
     if not id_str:
         return "invalid"
-    
-    ADJECTIVES = ["swift", "brave", "calm", "eager", "gentle", "cosmic", "golden", "lunar", "zesty", "noble"]
-    NOUNS = ["hawk", "lion", "eagle", "fox", "wolf", "shark", "raven", "matrix", "comet", "orbit"]
     
     digest = hashlib.md5(id_str.encode()).hexdigest()
     adj = ADJECTIVES[int(digest[:4], 16) % len(ADJECTIVES)]
@@ -153,8 +161,8 @@ def extract_gpu_type(machine_name: str) -> str:
             return fmt(match)
     return machine_name.split()[-1] if machine_name else "Unknown"
 
-def with_retry(max_attempts=3, delay=1.0):
-    """Retry decorator."""
+def with_retry(max_attempts: int = 3, delay: float = 1.0):
+    """Retry decorator for API calls."""
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -168,7 +176,7 @@ def with_retry(max_attempts=3, delay=1.0):
         return wrapper
     return decorator
 
-# ============= MAIN SDK CLASS =============
+# Main SDK Class
 class Lium:
     """Clean Unix-style SDK for Lium."""
     
@@ -195,7 +203,7 @@ class Lium:
             raise LiumServerError(f"Server error: {resp.status_code}")
         raise LiumError(f"API error {resp.status_code}: {resp.text}")
     
-    def _dict_to_executor_info(self, executor_dict: Dict) -> ExecutorInfo:
+    def _dict_to_executor_info(self, executor_dict: Dict) -> Optional[ExecutorInfo]:
         """Convert executor dict to ExecutorInfo object."""
         if not executor_dict:
             return None
@@ -212,7 +220,7 @@ class Lium:
         # If we couldn't extract from machine_name, try specs
         if gpu_type == machine_name.split()[-1] and gpu_info.get("details"):
             gpu_details = gpu_info.get("details", [])
-            if gpu_details and len(gpu_details) > 0:
+            if gpu_details:
                 gpu_name = gpu_details[0].get("name", "")
                 if gpu_name:
                     gpu_type = extract_gpu_type(gpu_name)
@@ -235,25 +243,9 @@ class Lium:
     def ls(self, gpu_type: Optional[str] = None) -> List[ExecutorInfo]:
         """List available executors."""
         data = self._request("GET", "/executors").json()
+        executors = [self._dict_to_executor_info(d) for d in data]
+        executors = [e for e in executors if e]  # Filter None values
         
-        # Transform with list comprehension
-        executors = [
-            ExecutorInfo(
-                id=d.get("id", ""),
-                huid=generate_huid(d.get("id", "")),
-                machine_name=d.get("machine_name", ""),
-                gpu_type=extract_gpu_type(d.get("machine_name", "")),
-                gpu_count=d.get("specs", {}).get("gpu", {}).get("count", 1),
-                price_per_hour=d.get("price_per_hour", 0),
-                price_per_gpu_hour=d.get("price_per_hour", 0) / max(1, d.get("specs", {}).get("gpu", {}).get("count", 1)),
-                location=d.get("location", {}),
-                specs=d.get("specs", {}),
-                status=d.get("status", "unknown")
-            )
-            for d in data
-        ]
-        
-        # Filter if needed
         if gpu_type:
             executors = [e for e in executors if e.gpu_type.upper() == gpu_type.upper()]
         
@@ -314,20 +306,15 @@ class Lium:
     def up(self, executor_id: str, pod_name: Optional[str] = None, 
            template_id: Optional[str] = None) -> Dict[str, Any]:
         """Start a new pod."""
-        # Auto-select template
         if not template_id:
             available = self.templates()
             if not available:
                 raise ValueError("No templates available")
-            template_id = available[0]["id"]
+            template_id = available[0].id
         
-        # Get SSH keys
         ssh_keys = self.config.ssh_public_keys
         if not ssh_keys:
             raise ValueError("No SSH keys found")
-        
-        # Get initial pods before creation
-        initial_pods = {p.name: p.id for p in self.ps()}
         
         payload = {
             "pod_name": pod_name,
@@ -337,44 +324,35 @@ class Lium:
         
         response = self._request("POST", f"/executors/{executor_id}/rent", json=payload).json()
         
-        # If API returns pod info, use it
+        # API should return pod info
         if response and "id" in response:
             return response
         
-        # Otherwise find the new pod by comparing lists
-        time.sleep(3)
-        current_pods = self.ps()
-        for pod in current_pods:
-            if pod.name == pod_name and pod.name not in initial_pods:
-                return {"id": pod.id, "name": pod.name, "status": pod.status,
-                        "huid": pod.huid, "ssh_cmd": pod.ssh_cmd, "executor_id": executor_id}
+        # Fallback: find pod by name after creation
+        if pod_name:
+            for _ in range(2):
+                time.sleep(3)
+                for pod in self.ps():
+                    if pod.name == pod_name:
+                        return {
+                            "id": pod.id,
+                            "name": pod.name,
+                            "status": pod.status,
+                            "huid": pod.huid,
+                            "ssh_cmd": pod.ssh_cmd,
+                            "executor_id": executor_id
+                        }
         
-        # If still not found, try one more time
-        time.sleep(2)
-        for pod in self.ps():
-            if pod.name == pod_name:
-                return {"id": pod.id, "name": pod.name, "status": pod.status,
-                        "huid": pod.huid, "ssh_cmd": pod.ssh_cmd, "executor_id": executor_id}
-        
-        # Fallback - still return a fake ID so demo doesn't crash
-        return {"id": pod_name, "name": pod_name, "executor_id": executor_id}
+        raise LiumError(f"Failed to create pod{' ' + pod_name if pod_name else ''}")
     
     def down(self, pod: Union[str, PodInfo]) -> Dict[str, Any]:
         """Stop a pod."""
         pod_info = self._resolve_pod(pod)
         
-        # Handle both ExecutorInfo object and dict
-        if hasattr(pod_info.executor, 'id'):
-            executor_id = pod_info.executor.id
-        elif isinstance(pod_info.executor, dict):
-            executor_id = pod_info.executor.get("id")
-        else:
-            executor_id = None
-            
-        if not executor_id:
-            raise ValueError(f"No executor ID for pod {pod_info.name}")
+        if not pod_info.executor:
+            raise ValueError(f"No executor info for pod {pod_info.name}")
         
-        return self._request("DELETE", f"/executors/{executor_id}/rent").json()
+        return self._request("DELETE", f"/executors/{pod_info.executor.id}/rent").json()
     
     def rm(self, pod: Union[str, PodInfo]) -> Dict[str, Any]:
         """Remove pod (alias for down)."""
@@ -424,19 +402,16 @@ class Lium:
         if not pod_info.ssh_cmd:
             raise ValueError(f"No SSH for pod {pod_info.name}")
         
-        # Parse SSH command
-        import shlex
-        parts = shlex.split(pod_info.ssh_cmd)
-        user_host = parts[1]
-        user, host = user_host.split("@")
-        port = 22
-        if "-p" in parts:
-            port = int(parts[parts.index("-p") + 1])
-        
-        # Load SSH key
         if not self.config.ssh_key_path:
             raise ValueError("No SSH key configured")
         
+        # Parse SSH command
+        parts = shlex.split(pod_info.ssh_cmd)
+        user_host = parts[1]
+        user, host = user_host.split("@")
+        port = pod_info.ssh_port
+        
+        # Load SSH key
         key = None
         for key_type in [paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey]:
             try:
@@ -481,7 +456,7 @@ class Lium:
             }
     
     def stream_exec(self, pod: Union[str, PodInfo], command: str,
-                    env: Optional[Dict[str, str]] = None) -> Any:
+                    env: Optional[Dict[str, str]] = None) -> Generator[Dict[str, str], None, None]:
         """Execute command with streaming output."""
         command = self._prep_command(command, env)
         
@@ -517,9 +492,8 @@ class Lium:
         with ThreadPoolExecutor(max_workers=min(max_workers, len(pods))) as executor:
             return list(executor.map(exec_single, pods))
     
-    def wait_ready(self, pod: Union[str, PodInfo], timeout: int = 300) -> Optional[PodInfo]:
+    def wait_ready(self, pod: Union[str, PodInfo, Dict], timeout: int = 300) -> Optional[PodInfo]:
         """Wait for pod to be ready."""
-        # Get the pod ID first
         if isinstance(pod, PodInfo):
             pod_id = pod.id
         elif isinstance(pod, dict) and 'id' in pod:
@@ -529,7 +503,6 @@ class Lium:
         
         start = time.time()
         while time.time() - start < timeout:
-            # Refresh the pod list each time to get updated status
             fresh_pods = self.ps()
             current = next((p for p in fresh_pods if p.id == pod_id), None)
             
@@ -537,7 +510,7 @@ class Lium:
                 return current
             
             time.sleep(10)
-        return
+        return None
     
     def scp(self, pod: Union[str, PodInfo], local: str, remote: str) -> None:
         """Upload file to pod."""
@@ -579,15 +552,10 @@ class Lium:
             raise RuntimeError(f"Rsync failed: {result.stderr}")
 
 
-# ============= DEMO =============
-def demo():
-    """Quick demo."""
+if __name__ == "__main__":
+    # Quick demo
     lium = Lium()
     print(f"Executors: {len(lium.ls())}")
     print(f"Pods: {len(lium.ps())}")
     for pod in lium.ps()[:3]:
         print(f"  - {pod.name} ({pod.huid}): {pod.status}")
-
-
-if __name__ == "__main__":
-    demo()
