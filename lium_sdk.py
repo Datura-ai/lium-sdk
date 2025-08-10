@@ -56,7 +56,7 @@ class PodInfo:
     ports: Dict
     created_at: str
     updated_at: str
-    executor: Dict
+    executor: Optional[ExecutorInfo]
     template: Dict
 
     @property
@@ -195,6 +195,43 @@ class Lium:
             raise LiumServerError(f"Server error: {resp.status_code}")
         raise LiumError(f"API error {resp.status_code}: {resp.text}")
     
+    def _dict_to_executor_info(self, executor_dict: Dict) -> ExecutorInfo:
+        """Convert executor dict to ExecutorInfo object."""
+        if not executor_dict:
+            return None
+        
+        # Extract GPU info from specs or machine_name
+        specs = executor_dict.get("specs", {})
+        gpu_info = specs.get("gpu", {})
+        gpu_count = gpu_info.get("count", 1)
+        
+        # Extract GPU type from machine_name or specs
+        machine_name = executor_dict.get("machine_name", "")
+        gpu_type = extract_gpu_type(machine_name)
+        
+        # If we couldn't extract from machine_name, try specs
+        if gpu_type == machine_name.split()[-1] and gpu_info.get("details"):
+            gpu_details = gpu_info.get("details", [])
+            if gpu_details and len(gpu_details) > 0:
+                gpu_name = gpu_details[0].get("name", "")
+                if gpu_name:
+                    gpu_type = extract_gpu_type(gpu_name)
+        
+        price_per_hour = executor_dict.get("price_per_hour", 0)
+        
+        return ExecutorInfo(
+            id=executor_dict.get("id", ""),
+            huid=generate_huid(executor_dict.get("id", "")),
+            machine_name=machine_name,
+            gpu_type=gpu_type,
+            gpu_count=gpu_count,
+            price_per_hour=price_per_hour,
+            price_per_gpu_hour=price_per_hour / max(1, gpu_count),
+            location=executor_dict.get("location", {}),
+            specs=specs,
+            status=executor_dict.get("status", "unknown")
+        )
+    
     def ls(self, gpu_type: Optional[str] = None) -> List[ExecutorInfo]:
         """List available executors."""
         data = self._request("GET", "/executors").json()
@@ -236,7 +273,7 @@ class Lium:
                 ports=d.get("ports_mapping", {}),
                 created_at=d.get("created_at", ""),
                 updated_at=d.get("updated_at", ""),
-                executor=d.get("executor", {}),
+                executor=self._dict_to_executor_info(d.get("executor", {})) if d.get("executor") else None,
                 template=d.get("template", {})
             )
             for d in data
