@@ -154,7 +154,7 @@ def extract_gpu_type(machine_name: str) -> str:
     patterns = [
         (r"RTX\s*(\d{4})", lambda m: f"RTX{m.group(1)}"),
         (r"([HBL])(\d{2,3}S?)", lambda m: f"{m.group(1)}{m.group(2)}"),
-        (r"A(\d{2,3})", lambda m: f"A{m.group(1)}"),
+        (r"A(\d{2,4})", lambda m: f"A{m.group(1)}"),
     ]
     for pattern, fmt in patterns:
         if match := re.search(pattern, machine_name, re.I):
@@ -550,6 +550,66 @@ class Lium:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"Rsync failed: {result.stderr}")
+    
+    def create_template(
+        self,
+        name: str,
+        docker_image: str,
+        docker_image_digest: str,
+        docker_image_tag: str = "latest",
+        ports: Optional[List[int]] = None,
+        start_command: Optional[str] = None,
+        **kwargs
+    ) -> Template:
+        """Create a new template."""
+        if ports is None:
+            ports = [22, 8000]
+        
+        payload = {
+            "name": name,
+            "docker_image": docker_image,
+            "docker_image_digest": docker_image_digest,
+            "docker_image_tag": docker_image_tag,
+            "internal_ports": ports,
+            "startup_commands": start_command or "",
+            "category": kwargs.get("category", "UBUNTU"),
+            "container_start_immediately": kwargs.get("container_start_immediately", True),
+            "description": kwargs.get("description", name),
+            "entrypoint": kwargs.get("entrypoint", ""),
+            "environment": kwargs.get("environment", {}),
+            "is_private": kwargs.get("is_private", False),
+            "readme": kwargs.get("readme", name),
+            "volumes": kwargs.get("volumes", []),
+        }
+        
+        response = self._request("POST", "/templates", json=payload).json()
+        return Template(
+            id=response.get("id", ""),
+            huid=generate_huid(response.get("id", "")),
+            name=response.get("name", ""),
+            docker_image=response.get("docker_image", ""),
+            docker_image_tag=response.get("docker_image_tag", "latest"),
+            category=response.get("category", "general"),
+            status=response.get("status", "unknown"),
+        )
+    
+    def wait_template_ready(self, template_id: str, timeout: int = 300) -> Optional[Template]:
+        """Wait for template to be ready."""
+
+        start = time.time()
+        while time.time() - start < timeout:
+            templates = self.templates()
+            current = next((t for t in templates if t.id == template_id), None)
+            
+            if current:
+                status = current.status.upper()
+                if status == "VERIFY_SUCCESS":
+                    return current
+                elif status == "VERIFY_FAILED":
+                    raise LiumError(f"Template verification failed: {current.name}")
+            
+            time.sleep(10)
+        return None
 
 
 if __name__ == "__main__":
