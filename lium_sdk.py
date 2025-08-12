@@ -659,12 +659,12 @@ class Lium:
         
         resp = self._request("PUT", f"/templates/{template_id}", json=payload).json()
         return Template(
-            id=resp.get("id", ""),
-            huid=generate_huid(resp.get("id", "")),
-            name=resp.get("name", ""),
-            docker_image=resp.get("docker_image", ""),
-            docker_image_tag=resp.get("docker_image_tag", "latest"),
-            category=resp.get("category", "general"),
+            id=template_id,
+            huid=generate_huid(template_id),
+            name=payload['name'],
+            docker_image=payload['docker_image'],
+            docker_image_tag=payload['docker_image_tag'],
+            category=payload['category'],
             status=resp.get("status", "unknown"),
         )
     
