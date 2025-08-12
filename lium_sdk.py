@@ -279,9 +279,14 @@ class Lium:
         
         return pods
     
-    def templates(self, filter: Optional[str] = None) -> List[Template]:
+    def templates(self, filter: Optional[str] = None, only_my: bool = False) -> List[Template]:
         """List available templates (Unix-style: like 'ls' for templates)."""
         data = self._request("GET", "/templates").json()
+        
+        if only_my:
+            user_id = self.get_my_user_id()
+            data = [d for d in data if d.get("user_id") == user_id]
+        
         templates = [
             Template(
                 id=d.get("id", ""),
@@ -551,6 +556,7 @@ class Lium:
         if result.returncode != 0:
             raise RuntimeError(f"Rsync failed: {result.stderr}")
     
+    
     def create_template(
         self,
         name: str,
@@ -562,15 +568,12 @@ class Lium:
         **kwargs
     ) -> Template:
         """Create a new template."""
-        if ports is None:
-            ports = [22, 8000]
-        
         payload = {
             "name": name,
             "docker_image": docker_image,
             "docker_image_digest": docker_image_digest,
             "docker_image_tag": docker_image_tag,
-            "internal_ports": ports,
+            "internal_ports": ports or [22, 8000],
             "startup_commands": start_command or "",
             "category": kwargs.get("category", "UBUNTU"),
             "container_start_immediately": kwargs.get("container_start_immediately", True),
@@ -610,6 +613,96 @@ class Lium:
             
             time.sleep(10)
         return None
+    
+    def get_my_user_id(self) -> str:
+        """Get current user ID."""
+        return self._request("GET", "/users/me").json()["id"]
+    
+    def update_template(
+        self,
+        template_id: str,
+        name: str,
+        docker_image: str,
+        docker_image_digest: str,
+        docker_image_tag: str = "latest",
+        ports: Optional[List[int]] = None,
+        start_command: Optional[str] = None,
+        **kwargs
+    ) -> Template:
+        """Update existing template."""
+        templates = self._request("GET", "/templates").json()
+        current = next((t for t in templates if t["id"] == template_id), None)
+        
+        if not current:
+            raise ValueError(f"Template with ID {template_id} not found")
+        
+        if current.get("user_id") != self.get_my_user_id():
+            raise ValueError(f"Cannot update template {template_id}: not owned by current user")
+        
+        payload = current.copy()
+        payload.update({
+            "name": name,
+            "docker_image": docker_image,
+            "docker_image_digest": docker_image_digest,
+            "docker_image_tag": docker_image_tag,
+            "internal_ports": ports or [22, 8000],
+            "startup_commands": start_command or "",
+            "category": kwargs.get("category", payload.get("category", "UBUNTU")),
+            "container_start_immediately": kwargs.get("container_start_immediately", payload.get("container_start_immediately", True)),
+            "description": kwargs.get("description", payload.get("description", name)),
+            "entrypoint": kwargs.get("entrypoint", payload.get("entrypoint", "")),
+            "environment": kwargs.get("environment", payload.get("environment", {})),
+            "is_private": kwargs.get("is_private", payload.get("is_private", False)),
+            "readme": kwargs.get("readme", payload.get("readme", name)),
+            "volumes": kwargs.get("volumes", payload.get("volumes", [])),
+        })
+        
+        resp = self._request("PUT", f"/templates/{template_id}", json=payload).json()
+        return Template(
+            id=resp.get("id", ""),
+            huid=generate_huid(resp.get("id", "")),
+            name=resp.get("name", ""),
+            docker_image=resp.get("docker_image", ""),
+            docker_image_tag=resp.get("docker_image_tag", "latest"),
+            category=resp.get("category", "general"),
+            status=resp.get("status", "unknown"),
+        )
+    
+    def upsert_template(
+        self,
+        name: str,
+        docker_image: str,
+        docker_image_digest: str,
+        docker_image_tag: str = "latest",
+        ports: Optional[List[int]] = None,
+        start_command: Optional[str] = None,
+        **kwargs
+    ) -> Template:
+        """Create template or update existing if name matches."""
+        my_templates = self.templates(only_my=True)
+        existing = next((t for t in my_templates if t.name == name), None)
+        
+        if existing:
+            return self.update_template(
+                template_id=existing.id,
+                name=name,
+                docker_image=docker_image,
+                docker_image_digest=docker_image_digest,
+                docker_image_tag=docker_image_tag,
+                ports=ports,
+                start_command=start_command,
+                **kwargs
+            )
+        else:
+            return self.create_template(
+                name=name,
+                docker_image=docker_image,
+                docker_image_digest=docker_image_digest,
+                docker_image_tag=docker_image_tag,
+                ports=ports,
+                start_command=start_command,
+                **kwargs
+            )
 
 
 if __name__ == "__main__":
