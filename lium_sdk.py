@@ -51,6 +51,7 @@ class ExecutorInfo:
     location: Dict
     specs: Dict
     status: str
+    docker_in_docker: bool
 
 
 @dataclass
@@ -248,7 +249,8 @@ class Lium:
             price_per_gpu_hour=price_per_hour / max(1, gpu_count),
             location=executor_dict.get("location", {}),
             specs=specs,
-            status=executor_dict.get("status", "unknown")
+            status=executor_dict.get("status", "unknown"),
+            docker_in_docker=specs.get("sysbox_runtime", False)
         )
 
     def ls(self, gpu_type: Optional[str] = None) -> List[ExecutorInfo]:
