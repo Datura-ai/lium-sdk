@@ -17,6 +17,7 @@ dependencies = [
     "loguru>=0.7.0",
     "paramiko>=3.5.1",
     "python-dotenv>=1.1.1",
+    "bittensor>=9.8.3",
 ]
 
 [project.optional-dependencies]
