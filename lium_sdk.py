@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Union
+from urllib.parse import parse_qs, urlparse
 
 import paramiko
 import requests
@@ -735,11 +736,16 @@ class Lium:
             "GET", "/token/generate", base_url=self.config.base_pay_url, headers=pay_headers
         ).json()["access_key"]
         sig = bt_wallet.coldkey.sign(access_key.encode()).hex()
-        user = self._request("GET", "/users/me").json()
-        response = self._request("POST", "/tao/create-transfer", json={"amount": 10})
-        app_id = response.json()["url"].split("app_id=")[1].split("&")[0]
+        create_transfer_response = self._request("POST", "/tao/create-transfer", json={"amount": 10})
+        redirect_url = create_transfer_response.json()["url"]
+        
+        # Parse URL parameters elegantly
+        parsed_url = urlparse(redirect_url)
+        params = parse_qs(parsed_url.query)
+        app_id = params["app_id"][0]
+        stripe_customer_id = params["customer_id"][0]
 
-        response = self._request(
+        verify_response = self._request(
             "POST",
             "/token/verify",
             base_url=self.config.base_pay_url,
@@ -748,12 +754,12 @@ class Lium:
                 "coldkey_address": bt_wallet.coldkeypub.ss58_address,
                 "access_key": access_key,
                 "signature": sig,
-                "stripe_customer_id": user["stripe_customer_id"],
+                "stripe_customer_id": stripe_customer_id,
                 "application_id": app_id,
             },
         )
-        if response.json()["status"].lower() != "ok":
-            raise LiumError(f"Failed to add wallet: {response.text}")
+        if verify_response.json()["status"].lower() != "ok":
+            raise LiumError(f"Failed to add wallet: {verify_response.text}")
 
         for i in range(5):
             wallets = [w.get('wallet_hash', '') for w in self.wallets()]
