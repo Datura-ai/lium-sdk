@@ -48,7 +48,7 @@ class AsyncSSHKeys(BaseAsyncResource, _SSHKeysCore):
         :return: A list of SSHKey objects.
         :rtype: list[SSHKey]
         """
-        resp = await self._t.arequest("GET", f"{self.list_url}/me")
+        resp = await self._t.arequest("GET", f"{self.list_url}")
         return self.parse_many(self._get_json(resp))
 
     async def delete(self, id: UUID) -> None:

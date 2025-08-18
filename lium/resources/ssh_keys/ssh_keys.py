@@ -48,7 +48,7 @@ class SSHKeys(BaseResource, _SSHKeysCore):
         :return: A list of SSHKey objects.
         :rtype: list[SSHKey]
         """
-        resp = self._t.request("GET", f"{self.list_url}/me")
+        resp = self._t.request("GET", f"{self.list_url}")
         return self.parse_many(self._get_json(resp))
 
     def delete(self, id: UUID) -> None:
