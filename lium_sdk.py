@@ -739,7 +739,7 @@ class Lium:
         response = self._request("POST", "/tao/create-transfer", json={"amount": 10})
         app_id = response.json()["url"].split("app_id=")[1].split("&")[0]
 
-        self._request(
+        response = self._request(
             "POST",
             "/token/verify",
             base_url=self.config.base_pay_url,
@@ -752,6 +752,14 @@ class Lium:
                 "application_id": app_id,
             },
         )
+        if response.json()["status"].lower() != "ok":
+            raise LiumError(f"Failed to add wallet: {response.text}")
+
+        for i in range(5):
+            wallets = [w.get('wallet_hash', '') for w in lium.wallets()]
+            if bt_wallet.coldkeypub.ss58_address in wallets:
+                return
+        raise LiumError("Failed to add wallet. Wallet not found after 5 attempts.")
 
     def balance(self) -> float:
         """Get current user balance."""
