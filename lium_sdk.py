@@ -408,7 +408,7 @@ class Lium:
         """Get list of available GPU types."""
         available_machines = self.ls()
         gpu_types = {machine.gpu_type for machine in available_machines}
-        return sorted(gpu_types)
+        return gpu_types
 
     def get_template(self, template_id: Optional[str] = None) -> Optional[Template]:
         """Get template ID, auto-selecting if None."""
