@@ -407,7 +407,7 @@ class Lium:
     def gpu_types(self)->set[str]:
         """Get list of available GPU types."""
         available_machines = self._request("GET", "/machines").json()
-        gpu_types = {extract_gpu_type(machine.get('name') or '') for machine in available_machines}
+        gpu_types = {extract_gpu_type(machine.get("name") or "") for machine in available_machines}
         return gpu_types
 
     def get_template(self, template_id: Optional[str] = None) -> Optional[Template]:
