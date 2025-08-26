@@ -404,7 +404,7 @@ class Lium:
 
         return None
 
-    def gpu_types(self):
+    def gpu_types(self)->set[str]:
         """Get list of available GPU types."""
         available_machines = self.ls()
         gpu_types = {machine.gpu_type for machine in available_machines}
