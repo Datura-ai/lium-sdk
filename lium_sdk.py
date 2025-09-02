@@ -765,6 +765,7 @@ class Lium:
             wallets = [w.get('wallet_hash', '') for w in self.wallets()]
             if bt_wallet.coldkeypub.ss58_address in wallets:
                 return
+            time.sleep(2)
         raise LiumError("Failed to add wallet. Wallet not found after 5 attempts.")
 
     def balance(self) -> float:
