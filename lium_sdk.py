@@ -96,6 +96,33 @@ class Template:
 
 
 @dataclass
+class BackupConfig:
+    """Backup configuration information."""
+    id: str
+    huid: str
+    pod_executor_id: str
+    backup_frequency_hours: int
+    retention_days: int
+    backup_path: str
+    is_active: bool
+    created_at: str
+    updated_at: Optional[str] = None
+
+
+@dataclass
+class BackupLog:
+    """Backup log information."""
+    id: str
+    huid: str
+    backup_config_id: str
+    status: str
+    started_at: str
+    completed_at: Optional[str] = None
+    size_bytes: Optional[int] = None
+    error_message: Optional[str] = None
+
+
+@dataclass
 class Config:
     api_key: str
     base_url: str = "https://lium.io/api"
@@ -140,7 +167,7 @@ class Config:
         pub_path = self.ssh_key_path.with_suffix('.pub')
         if pub_path.exists():
             with open(pub_path) as f:
-                return [l.strip() for l in f if l.strip().startswith(('ssh-', 'ecdsa-'))]
+                return [line.strip() for line in f if line.strip().startswith(('ssh-', 'ecdsa-'))]
         return []
 
 # Helper Functions
@@ -215,6 +242,33 @@ class Lium:
         if 500 <= resp.status_code < 600:
             raise LiumServerError(f"Server error: {resp.status_code}")
         raise LiumError(f"API error {resp.status_code}: {resp.text}")
+
+    def _dict_to_backup_config(self, config_dict: Dict) -> BackupConfig:
+        """Convert backup config dict to BackupConfig object."""
+        return BackupConfig(
+            id=config_dict.get("id", ""),
+            huid=generate_huid(config_dict.get("id", "")),
+            pod_executor_id=config_dict.get("pod_executor_id", ""),
+            backup_frequency_hours=config_dict.get("backup_frequency_hours", 0),
+            retention_days=config_dict.get("retention_days", 0),
+            backup_path=config_dict.get("backup_path", ""),
+            is_active=config_dict.get("is_active", True),
+            created_at=config_dict.get("created_at", ""),
+            updated_at=config_dict.get("updated_at")
+        )
+
+    def _dict_to_backup_log(self, log_dict: Dict) -> BackupLog:
+        """Convert backup log dict to BackupLog object."""
+        return BackupLog(
+            id=log_dict.get("id", ""),
+            huid=generate_huid(log_dict.get("id", "")),
+            backup_config_id=log_dict.get("backup_config_id", ""),
+            status=log_dict.get("status", "unknown"),
+            started_at=log_dict.get("started_at", ""),
+            completed_at=log_dict.get("completed_at"),
+            size_bytes=log_dict.get("size_bytes"),
+            error_message=log_dict.get("error_message")
+        )
 
     def _dict_to_executor_info(self, executor_dict: Dict) -> Optional[ExecutorInfo]:
         """Convert executor dict to ExecutorInfo object."""
@@ -773,6 +827,72 @@ class Lium:
                 return
             time.sleep(2)
         raise LiumError("Failed to add wallet. Wallet not found after 5 attempts.")
+
+    def backup_create(
+        self, 
+        pod: Union[str, PodInfo],
+        path: str = "/home",
+        frequency_hours: int = 6,
+        retention_days: int = 7
+    ) -> BackupConfig:
+        """Create backup configuration for pod."""
+        pod_info = self._resolve_pod(pod)
+        
+        if not pod_info.executor:
+            raise ValueError(f"Pod {pod_info.name} has no executor information")
+        
+        payload = {
+            "pod_executor_id": pod_info.executor.id,
+            "backup_frequency_hours": frequency_hours,
+            "retention_days": retention_days,
+            "backup_path": path
+        }
+        
+        response = self._request("POST", "/backup-configs", json=payload).json()
+        
+        return self._dict_to_backup_config(response)
+
+    def backup_now(
+        self,
+        pod: Union[str, PodInfo],
+        name: str,
+        description: str = ""
+    ) -> Dict[str, Any]:
+        """Trigger immediate backup for pod."""
+        pod_info = self._resolve_pod(pod)
+        
+        payload = {
+            "name": name,
+            "description": description
+        }
+        
+        return self._request("POST", f"/pods/{pod_info.id}/backup", json=payload).json()
+
+    def backup_list(self, pod: Optional[Union[str, PodInfo]] = None) -> List[BackupConfig]:
+        """List backup configurations."""
+        if pod:
+            pod_info = self._resolve_pod(pod)
+            if not pod_info.executor:
+                raise ValueError(f"Pod {pod_info.name} has no executor information")
+            response = self._request("GET", f"/backup-configs/pod/{pod_info.executor.id}").json()
+            configs = [response] if response else []
+        else:
+            configs = self._request("GET", "/backup-configs").json()
+        
+        return [self._dict_to_backup_config(c) for c in configs]
+
+    def backup_logs(self, pod: Union[str, PodInfo]) -> List[BackupLog]:
+        """Get backup logs for pod."""
+        pod_info = self._resolve_pod(pod)
+        if not pod_info.executor:
+            raise ValueError(f"Pod {pod_info.name} has no executor information")
+        
+        logs = self._request("GET", f"/backup-logs/pod/{pod_info.executor.id}").json()
+        return [self._dict_to_backup_log(log) for log in logs]
+
+    def backup_delete(self, config_id: str) -> Dict[str, Any]:
+        """Delete backup configuration."""
+        return self._request("DELETE", f"/backup-configs/{config_id}").json()
 
     def balance(self) -> float:
         """Get current user balance."""
