@@ -9,3 +9,4 @@ lium.egg-info/
 *.egg-info
 .vscode/
 lium/_scripts/
+CLAUDE.md
