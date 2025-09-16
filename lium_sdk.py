@@ -39,6 +39,9 @@ class LiumRateLimitError(LiumError):
 class LiumServerError(LiumError):
     """Server error."""
 
+class LiumNotFoundError(LiumError):
+    """Resource not found (404)."""
+
 # Data Models
 @dataclass
 class ExecutorInfo:
@@ -118,8 +121,10 @@ class BackupLog:
     status: str
     started_at: str
     completed_at: Optional[str] = None
-    size_bytes: Optional[int] = None
     error_message: Optional[str] = None
+    progress: Optional[float] = None
+    backup_volume_id: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 @dataclass
@@ -237,6 +242,8 @@ class Lium:
         # Map errors
         if resp.status_code == 401:
             raise LiumAuthError("Invalid API key")
+        if resp.status_code == 404:
+            raise LiumNotFoundError(f"Resource not found: {resp.text}")
         if resp.status_code == 429:
             raise LiumRateLimitError("Rate limit exceeded")
         if 500 <= resp.status_code < 600:
@@ -266,8 +273,10 @@ class Lium:
             status=log_dict.get("status", "unknown"),
             started_at=log_dict.get("started_at", ""),
             completed_at=log_dict.get("completed_at"),
-            size_bytes=log_dict.get("size_bytes"),
-            error_message=log_dict.get("error_message")
+            error_message=log_dict.get("error_message"),
+            progress=log_dict.get("progress"),
+            backup_volume_id=log_dict.get("backup_volume_id"),
+            created_at=log_dict.get("created_at")
         )
 
     def _dict_to_executor_info(self, executor_dict: Dict) -> Optional[ExecutorInfo]:
@@ -868,17 +877,21 @@ class Lium:
         
         return self._request("POST", f"/pods/{pod_info.id}/backup", json=payload).json()
 
-    def backup_list(self, pod: Optional[Union[str, PodInfo]] = None) -> List[BackupConfig]:
-        """List backup configurations."""
-        if pod:
-            pod_info = self._resolve_pod(pod)
-            if not pod_info.executor:
-                raise ValueError(f"Pod {pod_info.name} has no executor information")
+    def backup_config(self, pod: Union[str, PodInfo]) -> Optional[BackupConfig]:
+        """Get backup configuration for a pod."""
+        pod_info = self._resolve_pod(pod)
+        if not pod_info.executor:
+            raise ValueError(f"Pod {pod_info.name} has no executor information")
+        try:
             response = self._request("GET", f"/backup-configs/pod/{pod_info.executor.id}").json()
-            configs = [response] if response else []
-        else:
-            configs = self._request("GET", "/backup-configs").json()
-        
+            return self._dict_to_backup_config(response) if response else None
+        except LiumNotFoundError:
+            # No backup config exists for this pod
+            return None
+    
+    def backup_list(self) -> List[BackupConfig]:
+        """List all backup configurations across all pods."""
+        configs = self._request("GET", "/backup-configs").json()
         return [self._dict_to_backup_config(c) for c in configs]
 
     def backup_logs(self, pod: Union[str, PodInfo]) -> List[BackupLog]:
@@ -887,8 +900,20 @@ class Lium:
         if not pod_info.executor:
             raise ValueError(f"Pod {pod_info.name} has no executor information")
         
-        logs = self._request("GET", f"/backup-logs/pod/{pod_info.executor.id}").json()
-        return [self._dict_to_backup_log(log) for log in logs]
+        try:
+            response = self._request("GET", f"/backup-logs/pod/{pod_info.executor.id}").json()
+            
+            # Handle paginated response - extract items from the response
+            if isinstance(response, dict) and 'items' in response:
+                logs = response['items']
+            else:
+                # Fallback for non-paginated response
+                logs = response if isinstance(response, list) else []
+            
+            return [self._dict_to_backup_log(log) for log in logs]
+        except LiumNotFoundError:
+            # No backup logs exist for this pod, return empty list
+            return []
 
     def backup_delete(self, config_id: str) -> Dict[str, Any]:
         """Delete backup configuration."""
