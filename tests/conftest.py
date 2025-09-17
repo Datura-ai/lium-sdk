@@ -4,8 +4,12 @@ import os
 import time
 import uuid
 import pytest
+import logging
 from typing import Generator, Optional
 from lium_sdk import Lium, PodInfo
+
+# Suppress paramiko INFO logs (only show warnings and errors)
+logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 
 @pytest.fixture(scope="session")
@@ -113,8 +117,15 @@ def pod_lifecycle(lium_client: Lium, test_pod_name: str) -> Generator[Optional[P
 @pytest.fixture
 def test_files_content() -> dict:
     """Test files with content for backup/restore testing."""
+    # Generate unique content with timestamp and random ID to ensure uniqueness
+    import random
+    import datetime
+    
+    unique_id = str(uuid.uuid4())[:8]
+    timestamp = datetime.datetime.now().isoformat()
+    
     return {
-        "/root/test_file1.txt": "This is test file 1 content\nLine 2 of file 1",
-        "/root/test_file2.txt": "This is test file 2 content\nWith multiple lines\nAnd more data",
-        "/root/test_dir/nested_file.txt": "This is a nested file in a directory",
+        "/root/test_file1.txt": f"Test run ID: {unique_id}\nTimestamp: {timestamp}\nPierre's secret recipe #1\nLine 2 of file 1",
+        "/root/test_file2.txt": f"Test run ID: {unique_id}\nTimestamp: {timestamp}\nPierre's baguette formula\nWith multiple lines\nAnd more data\nRandom: {random.randint(1000, 9999)}",
+        "/root/test_dir/nested_file.txt": f"Test run ID: {unique_id}\nNested file in directory\nPierre's croissant technique\nTimestamp: {timestamp}",
     }
