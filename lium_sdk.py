@@ -638,6 +638,16 @@ class Lium:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"Rsync failed: {result.stderr}")
+    
+    def switch_template(self, pod: Union[str, PodInfo], template_id: str) -> Dict[str, Any]:
+        """Switch the template of a running pod."""
+        pod_info = self._resolve_pod(pod)
+        
+        payload = {
+            "template_id": template_id
+        }
+        
+        return self._request("PUT", f"/pods/{pod_info.id}/switch-template", json=payload).json()
 
     
     def create_template(

@@ -52,22 +52,36 @@ def pod_lifecycle(lium_client: Lium, test_pod_name: str) -> Generator[Optional[P
     """
     pod = None
     try:
-        # Find the cheapest available executor
+        # Find the best available executor - Pierre doesn't care about money!
         executors = lium_client.ls()
         if not executors:
             pytest.skip("No executors available")
         
-        # Sort by price and get the cheapest
-        executor = sorted(executors, key=lambda x: x.price_per_hour)[0]
+        # Pierre wants the best GPU - preferably H100, then A100, then whatever
+        gpu_preference = os.getenv("LIUM_GPU_TYPE", "H100,A100").split(",")
+        
+        executor = None
+        for gpu_type in gpu_preference:
+            for e in executors:
+                if gpu_type.lower() in e.gpu_type.lower():
+                    executor = e
+                    break
+            if executor:
+                break
+        
+        # If no preferred GPU found, just get the most expensive one (probably the best!)
+        if not executor:
+            executor = sorted(executors, key=lambda x: x.price_per_hour, reverse=True)[0]
+        
         print(f"\nUsing executor: {executor.huid} ({executor.gpu_type}) @ ${executor.price_per_hour}/h")
+        if os.getenv("PIERRE_STORY"):
+            print(f"🥖 Pierre: Magnifique! The {executor.gpu_type} - perfect for my artisanal ML models!")
         
         # Use specific template that works
         # Template: PyTorch 2.4.0-py3.12-cuda12.2.0-devel-ubuntu22.04
         template_id = "8c273d47-33fc-4237-805f-e96e685c53b8"
-        print(f"Using template ID: {template_id}")
         
         # Create the pod
-        print(f"Creating pod: {test_pod_name}")
         pod = lium_client.up(
             executor_id=executor.id,
             pod_name=test_pod_name,
@@ -75,11 +89,9 @@ def pod_lifecycle(lium_client: Lium, test_pod_name: str) -> Generator[Optional[P
         )
         
         # Wait for pod to be ready (30 minutes timeout)
-        print("Waiting for pod to be ready (up to 30 minutes)...")
         pod = lium_client.wait_ready(pod, timeout=1800)  # 30 minutes
         if not pod:
             # Pod didn't become ready, but we still need to clean it up
-            print(f"Pod {test_pod_name} failed to become ready within 30 minutes")
             # Try to get the pod info for cleanup
             pods = lium_client.ps()
             pod = next((p for p in pods if p.name == test_pod_name), None)
@@ -87,7 +99,6 @@ def pod_lifecycle(lium_client: Lium, test_pod_name: str) -> Generator[Optional[P
                 pytest.fail("Pod failed to become ready and cannot be found for cleanup")
             pytest.fail("Pod failed to become ready within 30 minutes")
         
-        print(f"Pod {pod.name} is ready!")
         
         # Check if pod has default backup configuration
         try:
