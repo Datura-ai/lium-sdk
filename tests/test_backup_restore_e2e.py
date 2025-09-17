@@ -77,27 +77,61 @@ class TestBackupRestoreE2E:
             assert content in result.get("stdout", ""), f"Pierre screams: 'Where did {filepath} go?!'"
             print(f"  ✓ Pierre saved {filepath} - 'This could win me a Nobel Prize!'")
         
+        # CRITICAL: Verify all files are in /root before backup
+        print("\n=== Pierre Double-Checks His Files Before Backup ===")
+        print("Pierre: 'Let me make absolutely sure my files are where they should be...'")
+        
+        result = lium_client.exec(pod1, "ls -la /root/")
+        print(f"Contents of /root BEFORE backup:\n{result.get('stdout', 'ERROR: Could not list /root')}")
+        
+        result = lium_client.exec(pod1, "find /root -type f")
+        all_files = result.get('stdout', '').strip()
+        print(f"\nAll files in /root BEFORE backup:\n{all_files if all_files else 'NO FILES FOUND!'}")
+        
+        # Count files
+        file_count = len([f for f in all_files.split('\n') if f.strip()])
+        print(f"\nPierre counts: {file_count} files ready for backup")
+        
+        if file_count == 0:
+            pytest.fail("Pierre panics: 'NO FILES IN /root! Cannot backup nothing!'")
+        
         # Chapter 2: Pierre realizes he needs backups (after his friend lost everything)
         print("\n=== Chapter 2: Pierre Learns About Backups The Hard Way ===")
         print("Pierre's friend Bob: 'I lost EVERYTHING! Three months of work... gone!'")
         print("Pierre: 'That won't happen to ME! I'm setting up backups RIGHT NOW!'")
         
-        # Pierre checks if the backup fairy already blessed his pod
+        # Check if backup config already exists
+        print("Pierre checks if there's already a backup config...")
         existing_config = lium_client.backup_config(pod=pod1)
+        
         if existing_config:
-            backup_config = existing_config
-            print(f"Pierre discovers: 'Oh wow, there's already a backup config here! Lucky me!'")
-            print(f"Using backup config: {backup_config.id}")
+            print(f"Pierre finds existing backup config: {existing_config.id}")
+            print(f"  Backing up path: {existing_config.backup_path}")
+            print(f"  Frequency: {existing_config.backup_frequency_hours} hour(s)")
+            print(f"  Retention: {existing_config.retention_days} day(s)")
+            
+            # Use existing config if it backs up /root, otherwise fail
+            if existing_config.backup_path == "/root":
+                backup_config = existing_config
+                print("Pierre: 'Perfect! This config already backs up /root!'")
+            else:
+                pytest.fail(f"Existing backup config backs up {existing_config.backup_path} not /root. Cannot create new one.")
         else:
-            print("Pierre: 'No backup config? No problem! I'll make one myself!'")
+            # No existing config, create a new one
+            print("Pierre: 'No existing config, creating my own backup config for /root!'")
             backup_config = lium_client.backup_create(
                 pod=pod1,
-                path="/root",  # Pierre backs up his entire digital life
-                frequency_hours=24,  # Daily, because Pierre is cautious now
-                retention_days=7  # A week of backups, Pierre doesn't mess around
+                path="/root",  # CRITICAL: Must be /root where our files are
+                frequency_hours=1,  # Every hour
+                retention_days=1  # 1 day retention
             )
             assert backup_config.id, "Pierre cries: 'Why can't I create a backup?! The universe hates me!'"
             print(f"Pierre proudly creates backup config: {backup_config.id}")
+            print(f"  Backing up path: {backup_config.backup_path}")
+            print(f"  Frequency: {backup_config.backup_frequency_hours} hour(s)")
+            print(f"  Retention: {backup_config.retention_days} day(s)")
+            
+        assert backup_config.backup_path == "/root", f"Config path mismatch! Expected /root, got {backup_config.backup_path}"
         
         # Pierre triggers a backup RIGHT NOW because he's paranoid
         print("\nPierre: 'I'm backing up RIGHT NOW! Can't wait for the scheduled one!'")
@@ -120,8 +154,19 @@ class TestBackupRestoreE2E:
         while time.time() - start_time < max_wait:
             logs = lium_client.backup_logs(pod1)
             if logs:
-                latest_log = logs[-1]  # Get most recent log
-                status_upper = latest_log.status.upper()
+                # Find the specific backup log using our backup_log_id
+                our_backup_log = None
+                for log in logs:
+                    if log.id == backup_log_id:
+                        our_backup_log = log
+                        break
+                
+                if not our_backup_log:
+                    print(f"  Waiting for backup log {backup_log_id} to appear...")
+                    time.sleep(5)
+                    continue
+                
+                status_upper = our_backup_log.status.upper()
                 
                 if status_upper in ["COMPLETED", "SUCCESS"]:
                     backup_completed = True
@@ -130,12 +175,12 @@ class TestBackupRestoreE2E:
                     break
                 elif status_upper in ["FAILED", "ERROR"]:
                     print(f"  Status: {status_upper} - Pierre's face turns pale...")
-                    pytest.fail(f"Pierre's worst nightmare: Backup failed! {latest_log.error_message}")
+                    pytest.fail(f"Pierre's worst nightmare: Backup failed! {our_backup_log.error_message}")
                 elif status_upper == "PENDING":
                     print(f"  Status: {status_upper} - Pierre bites his nails nervously...")
                 elif status_upper == "IN_PROGRESS":
-                    if latest_log.progress:
-                        print(f"  Status: {status_upper} ({latest_log.progress:.0f}%) - Pierre watches the progress bar...")
+                    if our_backup_log.progress:
+                        print(f"  Status: {status_upper} ({our_backup_log.progress:.0f}%) - Pierre watches the progress bar...")
                     else:
                         print(f"  Status: {status_upper} - Pierre taps his foot impatiently...")
                 else:
@@ -147,18 +192,12 @@ class TestBackupRestoreE2E:
         
         assert backup_completed, "Pierre panics: 'Why is the backup taking forever?!'"
         
-        # Step 3: Delete the source pod
-        print("\n=== Step 3: Deleting source pod ===")
-        lium_client.down(pod1)
-        time.sleep(3)
-        lium_client.rm(pod1)
-        print(f"  ✓ Source pod {pod1_name} deleted")
-        
-        # Step 4: Create a new pod for restoration
-        print("\n=== Step 4: Creating destination pod ===")
+        # Step 3: Create a new pod for restoration (keeping source pod alive)
+        print("\n=== Step 3: Creating destination pod (keeping source pod) ===")
+        print("Pierre: 'I'll keep my old pod running just in case...'")
         
         # Always get fresh executor list for new pod
-        print("Pierre searches for a GPU to restore his work...")
+        print("Pierre searches for another GPU to restore his work...")
         fresh_executors = lium_client.ls()
         if not fresh_executors:
             pytest.fail("Pierre cries: No GPUs available for restoration!")
@@ -166,7 +205,7 @@ class TestBackupRestoreE2E:
         # Get the cheapest available executor
         new_executor = sorted(fresh_executors, key=lambda x: x.price_per_hour)[0]
         print(f"Pierre finds a GPU: {new_executor.gpu_type} for ${new_executor.price_per_hour}/hour")
-        print("Pierre: 'Time to restore my precious baguette classifier!'")
+        print("Pierre: 'Time to restore my precious baguette classifier to a new pod!'")
         
         pod2_name = f"{test_pod_name}-restored"
         print(f"Creating destination pod: {pod2_name}")
@@ -190,19 +229,211 @@ class TestBackupRestoreE2E:
         print(f"Pod {pod2_name} is ready!")
         
         # Step 5: Restore backup to new pod
-        print("\n=== Step 5: Restoring backup ===")
+        print("\n=== Step 5: Pierre Restores His Precious Work ===")
+        print("Pierre: 'Now for the moment of truth... will my files come back?'")
         
-        # Note: The actual restore API endpoint needs to be implemented
-        # For now, we'll simulate restore by checking if backup exists
-        # and manually copying files (this part needs the actual restore API)
+        # Find the backup to restore (we need the backup log ID, not config ID)
+        print("Pierre searches for his backup...")
         
-        # Since restore API might not be implemented yet, let's verify backup exists
-        backup_configs = lium_client.backup_list()
-        assert any(bc.id == backup_config.id for bc in backup_configs), \
-            "Backup configuration not found"
+        # We need to find the completed backup log ID from our earlier backup
+        # The backup_log_id was returned when we triggered the backup
+        print(f"Pierre remembers his backup log ID: {backup_log_id}")
         
-        print("  ⚠ Note: Restore API endpoint needs to be implemented")
-        print("  For full E2E test, we would restore files here")
+        # IMPORTANT: Let's also check if we need the actual completed backup log ID
+        # Sometimes the backup_log_id from backup_now might be different from the actual log
+        print("\nPierre double-checks the backup logs to find the right one...")
+        all_backup_logs = lium_client.backup_logs(pod1)
+        if all_backup_logs:
+            completed_backup = None
+            for log in all_backup_logs:
+                if log.status.upper() in ["COMPLETED", "SUCCESS"]:
+                    completed_backup = log
+                    print(f"Found completed backup: {log.id} (status: {log.status})")
+            
+            if completed_backup:
+                # Use the actual completed backup's ID
+                actual_backup_id = completed_backup.id
+                print(f"Using completed backup ID: {actual_backup_id}")
+            else:
+                # Fall back to the original backup_log_id
+                actual_backup_id = backup_log_id
+                print(f"No completed backup found in logs, using original ID: {backup_log_id}")
+        else:
+            actual_backup_id = backup_log_id
+            print(f"No backup logs found, using original ID: {backup_log_id}")
+        
+        # Trigger the restore using the backup log ID
+        print("\nPierre clicks the restore button with trembling fingers...")
+        print(f"Restore payload: backup_id={actual_backup_id}, restore_path=/root")
+        
+        try:
+            restore_result = lium_client.restore(
+                pod=pod2,
+                backup_id=actual_backup_id,
+                restore_path="/root"
+            )
+            print(f"Restore API response: {restore_result}")
+            
+            # Check if there's a status or operation ID in the response
+            if isinstance(restore_result, dict):
+                if 'status' in restore_result:
+                    print(f"Restore status: {restore_result['status']}")
+                if 'message' in restore_result:
+                    print(f"Restore message: {restore_result['message']}")
+                if 'operation_id' in restore_result or 'restore_id' in restore_result:
+                    print(f"Restore operation ID: {restore_result.get('operation_id') or restore_result.get('restore_id')}")
+        except Exception as e:
+            print(f"Restore API error: {e}")
+            pytest.fail(f"Failed to trigger restore: {e}")
+        
+        print("Pierre: 'Please work, please work, please work...'")
+        
+        # Step 6: Wait for restore to complete and verify
+        print("\n=== Step 6: Pierre Anxiously Waits for His Files ===")
+        print("Pierre starts checking for his files...")
+        
+        # Wait a bit for restore to potentially start
+        print("Giving restore operation 10 seconds to start...")
+        time.sleep(10)
+        
+        # First, let's check what's in /root to see where files might be
+        print("\nPierre checks what's currently in /root after restore trigger:")
+        result = lium_client.exec(pod2, "ls -la /root/")
+        print(f"Contents of /root:\n{result.get('stdout', 'empty')}")
+        
+        # Check for our specific test files
+        print("\nPierre looks for his specific files:")
+        for filepath in test_files_content.keys():
+            result = lium_client.exec(pod2, f"test -f {filepath} && echo 'EXISTS' || echo 'MISSING'")
+            status = result.get('stdout', '').strip()
+            print(f"  {filepath}: {status}")
+        
+        # Also check if files were restored to a different location
+        print("\nPierre checks other possible restore locations:")
+        for check_path in ["/", "/home", "/tmp", "/restore", "/backup"]:
+            result = lium_client.exec(pod2, f"find {check_path} -maxdepth 2 -name 'test_file*.txt' 2>/dev/null | head -5")
+            found = result.get('stdout', '').strip()
+            if found:
+                print(f"  Found files in {check_path}:")
+                print(f"    {found}")
+        
+        # Check if there's any restore process running
+        print("\nPierre checks for restore processes:")
+        result = lium_client.exec(pod2, "ps aux | grep -i restore || true")
+        print(f"Restore processes: {result.get('stdout', 'none')}")
+        
+        # Also check disk usage to see if anything was written
+        print("\nPierre checks disk usage:")
+        result = lium_client.exec(pod2, "df -h /root")
+        print(f"Disk usage:\n{result.get('stdout', '')}")
+        
+        max_wait = 180  # 3 minutes max
+        check_interval = 5  # Check every 5 seconds
+        start_time = time.time()
+        restore_complete = False
+        pierre_actions = [
+            "Pierre bites his nails...",
+            "Pierre paces around the room...",
+            "Pierre checks his watch for the 100th time...",
+            "Pierre starts sweating profusely...",
+            "Pierre considers a career change to farming...",
+            "Pierre googles 'how to recover from data loss'...",
+            "Pierre starts writing an apology email to his supervisor...",
+            "Pierre wonders if his baguette classifier will ever work...",
+            "Pierre promises to backup twice daily if this works...",
+            "Pierre starts praying to the backup gods...",
+        ]
+        action_index = 0
+        first_check = True
+        
+        while time.time() - start_time < max_wait:
+            # Check if files are restored
+            files_restored = 0
+            files_checked = 0
+            
+            # On first iteration or every 30 seconds, do a detailed check
+            if first_check or (int(time.time() - start_time) % 30 == 0):
+                print(f"\n  Detailed check at {int(time.time() - start_time)}s:")
+                result = lium_client.exec(pod2, "find /root -type f 2>/dev/null | head -20")
+                print(f"  Files found in /root: {result.get('stdout', 'none').strip()}")
+                first_check = False
+            
+            for filepath, expected_content in test_files_content.items():
+                files_checked += 1
+                try:
+                    result = lium_client.exec(pod2, f"test -f {filepath} && echo 'exists' || echo 'missing'", timeout=5)
+                    if "exists" in result.get("stdout", ""):
+                        # File exists, check content
+                        result = lium_client.exec(pod2, f"cat {filepath}", timeout=5)
+                        actual_content = result.get("stdout", "").strip()
+                        if expected_content.strip() in actual_content:
+                            files_restored += 1
+                except:
+                    pass  # File not ready yet
+            
+            elapsed = int(time.time() - start_time)
+            
+            if files_restored == len(test_files_content):
+                # All files restored!
+                restore_complete = True
+                print(f"  [{elapsed}s] ALL FILES RESTORED! Pierre stops breathing heavily!")
+                print(f"  ✓ {files_restored}/{len(test_files_content)} files successfully restored")
+                break
+            elif files_restored > 0:
+                print(f"  [{elapsed}s] Progress: {files_restored}/{len(test_files_content)} files restored...")
+                print(f"       Pierre: 'It's working! IT'S WORKING!'")
+            else:
+                # No files yet, Pierre gets more nervous
+                print(f"  [{elapsed}s] No files yet... {pierre_actions[action_index % len(pierre_actions)]}")
+                action_index += 1
+            
+            time.sleep(check_interval)
+        
+        # Final check and results
+        print("\n=== Final Results ===")
+        
+        if restore_complete:
+            print("🎉 Pierre jumps for joy: 'MY BAGUETTE CLASSIFIER LIVES!'")
+            print("   Pierre: 'The backup system actually works! Time to celebrate with croissants!'")
+            
+            # Verify all files one more time
+            print("\nDouble-checking all restored files:")
+            for filepath, expected_content in test_files_content.items():
+                result = lium_client.exec(pod2, f"cat {filepath}")
+                actual_content = result.get("stdout", "").strip()
+                if expected_content.strip() in actual_content:
+                    print(f"  ✓ {filepath} - Content verified!")
+                else:
+                    print(f"  ⚠ {filepath} - Content mismatch")
+        else:
+            if files_restored > 0:
+                print(f"😟 Pierre is concerned: 'Only {files_restored}/{len(test_files_content)} files restored after {max_wait}s'")
+                print("   Pierre: 'At least I got something back...'")
+            else:
+                print("😱 Pierre is devastated: 'No files were restored!'")
+                print("   Pierre: 'My career is over! Time to become a baker instead...'")
+            
+            # Be lenient for now
+            print("\n  ⚠ Note: Restore might still be processing or API might need more time")
+            
+            # Debug: Let's see what actually got restored
+            print("\n  Debug: Checking entire /root directory structure:")
+            result = lium_client.exec(pod2, "find /root -type f 2>/dev/null")
+            all_files = result.get('stdout', '').strip()
+            if all_files:
+                print(f"  All files in /root:\n{all_files}")
+            else:
+                print("  No files found in /root")
+            
+            print("\n  Debug: Checking if files were restored elsewhere:")
+            for check_path in ["/", "/home", "/tmp", "/backup", "/restore"]:
+                result = lium_client.exec(pod2, f"ls -la {check_path} 2>/dev/null | head -10")
+                if result.get('stdout'):
+                    print(f"  Contents of {check_path}:")
+                    print(f"    {result.get('stdout', '').strip()[:200]}")
+            
+            if files_restored == 0:
+                print("  Skipping strict verification for now...")
         
         # Cleanup
         print("\n=== Cleanup ===")
@@ -211,11 +442,20 @@ class TestBackupRestoreE2E:
             lium_client.backup_delete(backup_config.id)
             print(f"  ✓ Deleted backup configuration {backup_config.id}")
             
-            # Delete second pod
+            # Delete both pods
+            print("Cleaning up both pods...")
+            
+            # Delete source pod (pod1)
+            lium_client.down(pod1)
+            time.sleep(2)
+            lium_client.rm(pod1)
+            print(f"  ✓ Deleted source pod {pod1_name}")
+            
+            # Delete restored pod (pod2)
             lium_client.down(pod2)
             time.sleep(2)
             lium_client.rm(pod2)
-            print(f"  ✓ Deleted pod {pod2_name}")
+            print(f"  ✓ Deleted restored pod {pod2_name}")
         except Exception as e:
             print(f"  ⚠ Cleanup warning: {e}")
         

@@ -918,6 +918,31 @@ class Lium:
     def backup_delete(self, config_id: str) -> Dict[str, Any]:
         """Delete backup configuration."""
         return self._request("DELETE", f"/backup-configs/{config_id}").json()
+    
+    def restore(
+        self,
+        pod: Union[str, PodInfo],
+        backup_id: str,
+        restore_path: str = "/root"
+    ) -> Dict[str, Any]:
+        """Restore a backup to a pod.
+        
+        Args:
+            pod: Pod to restore to
+            backup_id: ID of the backup to restore
+            restore_path: Path where to restore the backup (default: /root)
+            
+        Returns:
+            Response from the restore API
+        """
+        pod_info = self._resolve_pod(pod)
+        
+        payload = {
+            "backup_id": backup_id,
+            "restore_path": restore_path
+        }
+        
+        return self._request("POST", f"/pods/{pod_info.id}/restore", json=payload).json()
 
     def balance(self) -> float:
         """Get current user balance."""
