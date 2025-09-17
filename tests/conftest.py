@@ -99,16 +99,7 @@ def pod_lifecycle(lium_client: Lium, test_pod_name: str) -> Generator[Optional[P
                 pytest.fail("Pod failed to become ready and cannot be found for cleanup")
             pytest.fail("Pod failed to become ready within 30 minutes")
         
-        
-        # Check if pod has default backup configuration
-        try:
-            existing_configs = lium_client.backup_list(pod=pod)
-            if existing_configs:
-                print(f"Note: Pod has {len(existing_configs)} default backup config(s)")
-                for config in existing_configs:
-                    print(f"  - Config {config.id}: path={config.backup_path}, freq={config.backup_frequency_hours}h")
-        except Exception as e:
-            print(f"Could not check for default backup configs: {e}")
+        print(f"Pod {pod.name} is ready!")
         
         yield pod
         

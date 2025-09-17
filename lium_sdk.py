@@ -639,15 +639,49 @@ class Lium:
         if result.returncode != 0:
             raise RuntimeError(f"Rsync failed: {result.stderr}")
     
-    def switch_template(self, pod: Union[str, PodInfo], template_id: str) -> Dict[str, Any]:
-        """Switch the template of a running pod."""
+    def switch_template(self, pod: Union[str, PodInfo], template_id: str) -> PodInfo:
+        """Switch the template of a running pod.
+        
+        Args:
+            pod: Pod name, ID, HUID, or PodInfo object
+            template_id: ID of the template to switch to
+            
+        Returns:
+            PodInfo object with updated pod information
+        """
         pod_info = self._resolve_pod(pod)
         
         payload = {
             "template_id": template_id
         }
         
-        return self._request("PUT", f"/pods/{pod_info.id}/switch-template", json=payload).json()
+        response = self._request("PUT", f"/pods/{pod_info.id}/switch-template", json=payload).json()
+        
+        # Parse the response into a PodInfo object
+        return PodInfo(
+            id=pod_info.id,  # Keep the original pod ID
+            name=response.get("pod_name", pod_info.name),
+            status=response.get("status", "PENDING"),
+            huid=pod_info.huid,  # Keep the original HUID
+            ssh_cmd=response.get("ssh_connect_cmd"),
+            ports=response.get("ports_mapping", {}),
+            created_at=response.get("created_at", ""),
+            updated_at=response.get("updated_at", ""),
+            executor=ExecutorInfo(
+                id=response.get("executor_id", ""),
+                huid="",
+                machine_name="",
+                gpu_type=response.get("gpu_name", ""),
+                gpu_count=int(response.get("gpu_count", 0) or 0),
+                price_per_hour=0.0,
+                price_per_gpu_hour=0.0,
+                location={},
+                specs={},
+                status="",
+                docker_in_docker=False
+            ) if response.get("executor_id") else None,
+            template={"id": response.get("template_id", template_id)}
+        )
 
     
     def create_template(

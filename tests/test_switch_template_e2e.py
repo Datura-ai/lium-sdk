@@ -123,7 +123,8 @@ def test_switch_template_e2e(lium_client: Lium, pod_lifecycle: PodInfo):
     switch_start_time = time.time()
     
     try:
-        lium_client.switch_template(current_pod, new_template.id)
+        result = lium_client.switch_template(current_pod, new_template.id)
+        print(f"✓ Template switch initiated (status: {result.status})")
     except Exception as e:
         pytest.fail(f"Failed to switch template: {e}")
     
