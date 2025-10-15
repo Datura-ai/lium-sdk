@@ -385,8 +385,7 @@ class Lium:
 
         return templates
 
-    def up(self, executor_id: str, pod_name: Optional[str] = None, 
-           template_id: Optional[str] = None) -> Dict[str, Any]:
+    def up(self, executor_id: str, pod_name: Optional[str] = None, template_id: Optional[str] = None, volume_id: Optional[str] = None) -> Dict[str, Any]:
         """Start a new pod."""
         if not template_id:
             available = self.templates()
@@ -401,6 +400,7 @@ class Lium:
         payload = {
             "pod_name": pod_name,
             "template_id": template_id,
+            "volume_id": volume_id,
             "user_public_key": ssh_keys
         }
 
