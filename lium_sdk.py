@@ -128,6 +128,22 @@ class BackupLog:
 
 
 @dataclass
+class VolumeInfo:
+    """Volume information."""
+    id: str
+    huid: str
+    name: str
+    description: str
+    created_at: str
+    updated_at: Optional[str] = None
+    current_size_bytes: int = 0
+    current_file_count: int = 0
+    current_size_gb: float = 0.0
+    current_size_mb: float = 0.0
+    last_metrics_update: Optional[str] = None
+
+
+@dataclass
 class Config:
     api_key: str
     base_url: str = "https://lium.io/api"
@@ -279,6 +295,22 @@ class Lium:
             created_at=log_dict.get("created_at")
         )
 
+    def _dict_to_volume_info(self, volume_dict: Dict) -> VolumeInfo:
+        """Convert volume dict to VolumeInfo object."""
+        return VolumeInfo(
+            id=volume_dict.get("id", ""),
+            huid=generate_huid(volume_dict.get("id", "")),
+            name=volume_dict.get("name", ""),
+            description=volume_dict.get("description", ""),
+            created_at=volume_dict.get("created_at", ""),
+            updated_at=volume_dict.get("updated_at"),
+            current_size_bytes=volume_dict.get("current_size_bytes", 0),
+            current_file_count=volume_dict.get("current_file_count", 0),
+            current_size_gb=volume_dict.get("current_size_gb", 0.0),
+            current_size_mb=volume_dict.get("current_size_mb", 0.0),
+            last_metrics_update=volume_dict.get("last_metrics_update")
+        )
+
     def _dict_to_executor_info(self, executor_dict: Dict) -> Optional[ExecutorInfo]:
         """Convert executor dict to ExecutorInfo object."""
         if not executor_dict:
@@ -385,8 +417,7 @@ class Lium:
 
         return templates
 
-    def up(self, executor_id: str, pod_name: Optional[str] = None, 
-           template_id: Optional[str] = None) -> Dict[str, Any]:
+    def up(self, executor_id: str, pod_name: Optional[str] = None, template_id: Optional[str] = None, volume_id: Optional[str] = None) -> Dict[str, Any]:
         """Start a new pod."""
         if not template_id:
             available = self.templates()
@@ -401,6 +432,7 @@ class Lium:
         payload = {
             "pod_name": pod_name,
             "template_id": template_id,
+            "volume_id": volume_id,
             "user_public_key": ssh_keys
         }
 
@@ -991,6 +1023,38 @@ class Lium:
     def balance(self) -> float:
         """Get current user balance."""
         return float(self._request("GET", "/users/me").json().get("balance", 0))
+
+    def volumes(self) -> List[VolumeInfo]:
+        """List all volumes for the current user."""
+        data = self._request("GET", "/volumes").json()
+        return [self._dict_to_volume_info(v) for v in data]
+
+    def volume(self, volume_id: str) -> VolumeInfo:
+        """Get a specific volume by ID."""
+        response = self._request("GET", f"/volumes/{volume_id}").json()
+        return self._dict_to_volume_info(response)
+
+    def volume_create(self, name: str, *, description: str = "") -> VolumeInfo:
+        """Create a new volume."""
+        payload = {"name": name, "description": description}
+        response = self._request("POST", "/volumes", json=payload).json()
+        return self._dict_to_volume_info(response)
+
+    def volume_update(self, volume_id: str, *, name: Optional[str] = None, description: Optional[str] = None) -> VolumeInfo:
+        """Update a volume."""
+        payload = {}
+        if name is not None:
+            payload["name"] = name
+        if description is not None:
+            payload["description"] = description
+        if not payload:
+            raise ValueError("At least one of name or description must be provided")
+        response = self._request("PUT", f"/volumes/{volume_id}", json=payload).json()
+        return self._dict_to_volume_info(response)
+
+    def volume_delete(self, volume_id: str) -> Dict[str, Any]:
+        """Delete a volume."""
+        return self._request("DELETE", f"/volumes/{volume_id}").json()
 
 
 if __name__ == "__main__":
