@@ -56,6 +56,7 @@ class ExecutorInfo:
     specs: Dict
     status: str
     docker_in_docker: bool
+    available_port_count: Optional[int] = None
 
 
 @dataclass
@@ -346,7 +347,8 @@ class Lium:
             location=executor_dict.get("location", {}),
             specs=specs,
             status=executor_dict.get("status", "unknown"),
-            docker_in_docker=specs.get("sysbox_runtime", False)
+            docker_in_docker=specs.get("sysbox_runtime", False),
+            available_port_count=specs.get("available_port_count"),
         )
 
     def ls(self, gpu_type: Optional[str] = None) -> List[ExecutorInfo]:
@@ -417,7 +419,7 @@ class Lium:
 
         return templates
 
-    def up(self, executor_id: str, pod_name: Optional[str] = None, template_id: Optional[str] = None, volume_id: Optional[str] = None) -> Dict[str, Any]:
+    def up(self, executor_id: str, pod_name: Optional[str] = None, template_id: Optional[str] = None, volume_id: Optional[str] = None, initial_port_count: Optional[int] = None) -> Dict[str, Any]:
         """Start a new pod."""
         if not template_id:
             available = self.templates()
@@ -433,7 +435,8 @@ class Lium:
             "pod_name": pod_name,
             "template_id": template_id,
             "volume_id": volume_id,
-            "user_public_key": ssh_keys
+            "user_public_key": ssh_keys,
+            "initial_port_count": initial_port_count,
         }
 
         response = self._request("POST", f"/executors/{executor_id}/rent", json=payload).json()
