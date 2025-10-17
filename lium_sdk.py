@@ -1059,6 +1059,26 @@ class Lium:
         """Delete a volume."""
         return self._request("DELETE", f"/volumes/{volume_id}").json()
 
+    def schedule_termination(self, pod: Union[str, PodInfo], termination_time: str) -> None:
+        """Schedule a pod for automatic termination at a future date and time.
+
+        Args:
+            pod: Pod name, ID, HUID, or PodInfo object
+            termination_time: ISO 8601 formatted datetime string (e.g., "2025-10-17T15:30:00Z")
+        """
+        pod_info = self._resolve_pod(pod)
+        payload = {"removal_scheduled_at": termination_time}
+        self._request("POST", f"/pods/{pod_info.id}/schedule-removal", json=payload)
+
+    def cancel_scheduled_termination(self, pod: Union[str, PodInfo]) -> None:
+        """Cancel a scheduled termination for a pod.
+
+        Args:
+            pod: Pod name, ID, HUID, or PodInfo object
+        """
+        pod_info = self._resolve_pod(pod)
+        self._request("DELETE", f"/pods/{pod_info.id}/schedule-removal")
+
 
 if __name__ == "__main__":
     # Quick demo
