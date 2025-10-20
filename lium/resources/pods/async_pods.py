@@ -170,3 +170,4 @@ class AsyncPods(BaseAsyncResource, _PodsCore):
                 await self._client.templates.delete(template.id)
             logger.error(f"Error deploying pod: {e}")
             raise e
+
