@@ -179,22 +179,7 @@ class Pods(BaseResource, _PodsCore):
                 self._client.templates.delete(template.id)
             logger.error(f"Error deploying pod: {e}")
             raise e
-
-    def schedule_termination(self, pod_uuid: uuid.UUID, removal_scheduled_at: str) -> None:
-        """
-        Schedule a pod for automatic termination at a future date and time.
-
-        :param pod_uuid: The UUID of the pod to schedule for termination.
-        :type pod_uuid: uuid.UUID
-        :param removal_scheduled_at: The date and time to schedule the termination (ISO format string).
-        :type removal_scheduled_at: str
-        :return: None
-        :rtype: None
-        """
-        self._t.request("POST", f"/pods/{pod_uuid}/schedule-removal", json={
-            "removal_scheduled_at": removal_scheduled_at
-        })
-
+    
     def cancel_scheduled_termination(self, pod_uuid: uuid.UUID) -> None:
         """
         Cancel a scheduled termination for a pod.
