@@ -179,15 +179,3 @@ class Pods(BaseResource, _PodsCore):
                 self._client.templates.delete(template.id)
             logger.error(f"Error deploying pod: {e}")
             raise e
-    
-    def cancel_scheduled_termination(self, pod_uuid: uuid.UUID) -> None:
-        """
-        Cancel a scheduled termination for a pod.
-
-        :param pod_uuid: The UUID of the pod to cancel scheduled termination.
-        :type pod_uuid: uuid.UUID
-        :return: None
-        :rtype: None
-        """
-        self._t.request("DELETE", f"/pods/{pod_uuid}/schedule-removal")
-
