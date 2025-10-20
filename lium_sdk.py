@@ -71,6 +71,7 @@ class PodInfo:
     updated_at: str
     executor: Optional[ExecutorInfo]
     template: Dict
+    removal_scheduled_at: Optional[str]
 
     @property
     def host(self) -> Optional[str]:
@@ -377,7 +378,8 @@ class Lium:
                 created_at=d.get("created_at", ""),
                 updated_at=d.get("updated_at", ""),
                 executor=self._dict_to_executor_info(d.get("executor", {})) if d.get("executor") else None,
-                template=d.get("template", {})
+                template=d.get("template", {}),
+                removal_scheduled_at=d.get("removal_scheduled_at")
             )
             for d in data
         ]
