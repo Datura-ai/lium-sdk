@@ -14,7 +14,7 @@ def _env(key: str, default: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Config:
-    base_url: str = _env("LIUM_BASE_URL", "https://lium.io/api")
+    base_url: str = _env("LIUM_BASE_URL", "https://celiumcompute.ai/api")
     timeout: float = float(_env("LIUM_TIMEOUT", "10"))
     max_retries: int = int(_env("LIUM_MAX_RETRIES", "2"))
     sdk_version: str = "0.1.0"
