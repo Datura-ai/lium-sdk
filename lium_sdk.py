@@ -71,6 +71,7 @@ class PodInfo:
     updated_at: str
     executor: Optional[ExecutorInfo]
     template: Dict
+    removal_scheduled_at: Optional[str]
 
     @property
     def host(self) -> Optional[str]:
@@ -377,7 +378,8 @@ class Lium:
                 created_at=d.get("created_at", ""),
                 updated_at=d.get("updated_at", ""),
                 executor=self._dict_to_executor_info(d.get("executor", {})) if d.get("executor") else None,
-                template=d.get("template", {})
+                template=d.get("template", {}),
+                removal_scheduled_at=d.get("removal_scheduled_at")
             )
             for d in data
         ]
@@ -1058,6 +1060,32 @@ class Lium:
     def volume_delete(self, volume_id: str) -> Dict[str, Any]:
         """Delete a volume."""
         return self._request("DELETE", f"/volumes/{volume_id}").json()
+
+    def schedule_termination(self, pod: Union[str, PodInfo], termination_time: str) -> Dict[str, Any]:
+        """Schedule a pod for automatic termination at a future date and time.
+
+        Args:
+            pod: Pod name, ID, HUID, or PodInfo object
+            termination_time: ISO 8601 formatted datetime string (e.g., "2025-10-17T15:30:00Z")
+
+        Returns:
+            Response from the schedule termination API
+        """
+        pod_info = self._resolve_pod(pod)
+        payload = {"removal_scheduled_at": termination_time}
+        return self._request("POST", f"/pods/{pod_info.id}/schedule-removal", json=payload).json()
+
+    def cancel_scheduled_termination(self, pod: Union[str, PodInfo]) -> Dict[str, Any]:
+        """Cancel a scheduled termination for a pod.
+
+        Args:
+            pod: Pod name, ID, HUID, or PodInfo object
+
+        Returns:
+            Response from the cancel scheduled termination API
+        """
+        pod_info = self._resolve_pod(pod)
+        return self._request("DELETE", f"/pods/{pod_info.id}/schedule-removal").json()
 
 
 if __name__ == "__main__":
