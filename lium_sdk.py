@@ -477,6 +477,23 @@ class Lium:
         """Remove pod (alias for down)."""
         return self.down(pod)
 
+    def reboot(self, pod: Union[str, PodInfo], volume_id: Optional[str] = None) -> Dict[str, Any]:
+        """Reboot a pod.
+
+        Args:
+            pod: Pod identifier (ID, name, HUID) or PodInfo instance.
+            volume_id: Optional volume ID to attach for the reboot request.
+
+        Returns:
+            Pod data from the API response after issuing the reboot.
+        """
+        pod_info = self._resolve_pod(pod)
+        payload: Dict[str, Optional[str]] = {}
+        if volume_id is not None:
+            payload["volume_id"] = volume_id
+
+        return self._request("POST", f"/pods/{pod_info.id}/reboot", json=payload or {}).json()
+
     def _resolve_pod(self, pod: Union[str, PodInfo]) -> PodInfo:
         """Resolve pod by ID, name, or HUID."""
         if isinstance(pod, PodInfo):
