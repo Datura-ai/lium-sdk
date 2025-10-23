@@ -60,11 +60,14 @@ class ExecutorInfo:
 
     @property
     def driver_version(self) -> str:
-        return self.specs.get('gpu').get("driver", "")
+        """Extract GPU driver version from specs."""
+        return self.specs.get('gpu', {}).get('driver', '')
 
     @property
     def gpu_model(self) -> str:
-        return self.specs.get('gpu').get("details", {})[0].get("name", "")
+        """Extract GPU model name from specs."""
+        gpu_details = self.specs.get('gpu', {}).get('details', [])
+        return gpu_details[0].get('name', '') if gpu_details else ''
 
 
 @dataclass
