@@ -72,6 +72,8 @@ class PodInfo:
     executor: Optional[ExecutorInfo]
     template: Dict
     removal_scheduled_at: Optional[str]
+    jupyter_installation_status: Optional[str]
+    jupyter_url: Optional[str]
 
     @property
     def host(self) -> Optional[str]:
@@ -379,7 +381,9 @@ class Lium:
                 updated_at=d.get("updated_at", ""),
                 executor=self._dict_to_executor_info(d.get("executor", {})) if d.get("executor") else None,
                 template=d.get("template", {}),
-                removal_scheduled_at=d.get("removal_scheduled_at")
+                removal_scheduled_at=d.get("removal_scheduled_at"),
+                jupyter_installation_status=d.get("jupyter_installation_status"),
+                jupyter_url=d.get("jupyter_url")
             )
             for d in data
         ]
@@ -1103,6 +1107,20 @@ class Lium:
         """
         pod_info = self._resolve_pod(pod)
         return self._request("DELETE", f"/pods/{pod_info.id}/schedule-removal").json()
+
+    def install_jupyter(self, pod: Union[str, PodInfo], jupyter_internal_port: int) -> Dict[str, Any]:
+        """Install Jupyter Notebook on a pod.
+
+        Args:
+            pod: Pod name, ID, HUID, or PodInfo object
+            jupyter_internal_port: Internal port for Jupyter Notebook
+
+        Returns:
+            Response from the install Jupyter API
+        """
+        pod_info = self._resolve_pod(pod)
+        payload = {"jupyter_internal_port": jupyter_internal_port}
+        return self._request("POST", f"/pods/{pod_info.id}/install-jupyter", json=payload).json()
 
 
 if __name__ == "__main__":
