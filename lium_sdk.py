@@ -58,6 +58,17 @@ class ExecutorInfo:
     docker_in_docker: bool
     available_port_count: Optional[int] = None
 
+    @property
+    def driver_version(self) -> str:
+        """Extract GPU driver version from specs."""
+        return self.specs.get('gpu', {}).get('driver', '')
+
+    @property
+    def gpu_model(self) -> str:
+        """Extract GPU model name from specs."""
+        gpu_details = self.specs.get('gpu', {}).get('details', [])
+        return gpu_details[0].get('name', '') if gpu_details else ''
+
 
 @dataclass
 class PodInfo:
@@ -365,6 +376,35 @@ class Lium:
 
         return executors
 
+    def get_default_images(self, gpu_model: Optional[str], driver_version: Optional[str]) -> list[dict]:
+        """Get default images for GPU type and driver version."""
+        params = {
+            "gpu_model": gpu_model,
+            "driver_version": driver_version
+        }
+        data = self._request("GET", "/executors/default-docker-image", params=params).json()
+        return data
+
+
+    def default_docker_template(self, executor: str | ExecutorInfo) -> Template:
+        executor: ExecutorInfo = self.get_executor(executor)
+        if not executor:
+            raise ValueError("No executor found")
+
+        default_images = self.get_default_images(executor.gpu_model, executor.driver_version)
+
+        pytorch_image = next(
+            (img for img in default_images if "pytorch" in img.get("docker_image", "").lower()), None
+        )
+        # set pytorch_image as first image
+        if pytorch_image:
+            default_images = [pytorch_image] + default_images
+        for img in default_images:
+            template = self.get_template_by_image_name(img.get("docker_image"), img.get("docker_image_tag"))
+            if template:
+                return template
+
+
     def ps(self) -> List[PodInfo]:
         """List active pods."""
         data = self._request("GET", "/pods").json()
@@ -539,6 +579,13 @@ class Lium:
             if t.id == template_id or t.huid == template_id or t.name == template_id:
                 return t
         return None
+
+    def get_template_by_image_name(self, image_name: Optional[str] = None, image_tag: Optional[str] = None) -> Optional[Template]:
+        """Get template ID, auto-selecting if None."""
+        templates = self.templates()
+        for t in templates:
+            if t.docker_image == image_name and t.docker_image_tag == image_tag:
+                return t
 
     @contextmanager
     def ssh_connection(self, pod: Union[str, PodInfo], timeout: int = 30):
